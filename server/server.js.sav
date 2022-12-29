@@ -1,0 +1,42 @@
+var http = require("http");
+var https = require("https");
+var express = require("express");
+var bodyParser = require('body-parser');
+var cors = require('cors');
+var compression = require('compression');
+
+var fs = require('fs');
+
+var port = process.env.PORT || 9999;
+
+var app = express();
+
+app.use(compression());
+app.use(cors());
+
+app.use(function(req, res, next) {
+  res.header("Cross-Origin-Embedder-Policy", "require-corp");
+  res.header("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+
+app.get('/start.html', function(req, res) {
+
+	fs.readFile('start.html', 'utf8', function(err, data){
+      
+	    res.send(data.replace('{{process.html}}', 'process.html?app='+req.query.app));
+	});
+});
+
+app.get('/process.html', function(req, res) {
+
+	fs.readFile('process.html', 'utf8', function(err, data){
+      
+	    res.send(data.replaceAll('{{process}}', req.query.app));
+	});
+});
+
+app.use(express.static(__dirname + "/"));
+
+var server = http.createServer(app);
+server.listen(port, '0.0.0.0');

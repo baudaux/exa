@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>EXtended mAchine</title>
+    <link rel="stylesheet" href="xterm/xterm.css" />
+    <script src="xterm/xterm.js"></script>
+    <script src="xterm/xterm-addon-fit.js"></script>
+
+    <style>
+
+      html, body {
+	  
+          height: 100%;
+          padding: 0;
+          margin: 0;
+      }
+
+      body {
+
+          display: flex;
+          justify-content: center;
+          align-items: center;
+	  flex-direction: column;
+	  justify-content: space-between;
+      }
+
+      .header {
+
+	  height: 20px;
+	  width: 100%;
+	  display: flex;
+	  flex-direction: row-reverse;
+      }
+
+      .header > a {
+
+	  padding: 2px;
+      }
+
+      .footer {
+
+	  height: 20px;
+	  width: 100%;
+	  display: flex;
+      }
+
+      .footer > span {
+
+	  padding: 2px;
+      }
+
+      iframe {
+
+          display: none;
+      }
+
+      .tty {
+
+          position: relative;
+	  width: 80%;
+	  height: 80%;
+      }
+
+      .terminal {
+
+          padding: 2px;
+      }
+
+    </style>
+
+  </head>
+  <body>
+
+    <div class="header">
+      <a href="">Documentation</a>
+      <a href="">Extend</a>
+      
+    </div>
+
+    <div class="tty"></div>
+
+    <div class="footer">
+      <span>EXtended mAchine, a GNU/EXA distribution</span>
+    </div>
+
+    <script>
+
+      const randomNumber = Math.floor(Math.random() * 360);
+
+      document.body.style.backgroundColor = `hsl(${randomNumber}, 100%, 70%)`;
+      
+    </script>
+
+    <script src="term.js"></script>
+    <script src="startup.js"></script>
+    
+  </body>
+</html>
+
+
+
