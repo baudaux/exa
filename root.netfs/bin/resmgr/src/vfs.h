@@ -55,6 +55,8 @@ struct vnode * vfs_add_path(const char * pathname);
 
 struct vnode * vfs_find_node(const char * pathname);
 
+struct vnode * vfs_create_file(const char * pathname);
+
 void vfs_dump();
 
 

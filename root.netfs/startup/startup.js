@@ -5,6 +5,7 @@
 const iframe = document.createElement("iframe");
  
 iframe.src = "/bin/resmgr/exa/exa.html";
+iframe.setAttribute("pid", 1);
 
 document.body.appendChild(iframe);
 

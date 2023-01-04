@@ -76,6 +76,26 @@ pid_t create_tty_process() {
 
 pid_t create_netfs_process() {
 
+  pid_t pid = fork();
+  
+  if (pid == -1) { // Error
+    
+    emscripten_log(EM_LOG_CONSOLE,"Error while creating netfs process ...");
+    return -1;
+    
+  } else if (pid == 0) { // Child process
+
+    emscripten_log(EM_LOG_CONSOLE,"starting netfs process...");
+
+    execl ("/bin/netfs", "netfs", (void*)0);
+    
+  } else { // Parent process
+    
+    emscripten_log(EM_LOG_CONSOLE,"netfs process created: %d",pid);
+
+    return pid;
+  }
+
   return 0;
 }
 

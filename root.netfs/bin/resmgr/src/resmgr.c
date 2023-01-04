@@ -6,6 +6,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <fcntl.h>
+#include <errno.h>
+
 #include "vfs.h"
 #include "process.h"
 #include "device.h"
@@ -71,7 +74,7 @@ int main() {
       msg->_u.dev_msg.major = device_register_driver(msg->_u.dev_msg.dev_type, (const char *)msg->_u.dev_msg.dev_name, (const char *)remote_addr.sun_path);
       
       msg->msg_id |= 0x80;
-      msg->errno = 0;
+      msg->_errno = 0;
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
@@ -80,9 +83,14 @@ int main() {
       emscripten_log(EM_LOG_CONSOLE, "REGISTER_DEVICE %s (%d,%d,%d)", msg->_u.dev_msg.dev_name, msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
 
       device_register_device(msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor, (const char *)msg->_u.dev_msg.dev_name);
-      
+
+      // Add device in /dev
+      struct vnode * vnode = vfs_find_node("/dev");
+      if (vnode)
+	vfs_add_dev(vnode, (const char *) msg->_u.dev_msg.dev_name, msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
+
       msg->msg_id |= 0x80;
-      msg->errno = 0;
+      msg->_errno = 0;
       
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 
@@ -90,18 +98,90 @@ int main() {
 	
 	memset(buf,0,256);
 	msg->msg_id = WRITE;
-	strcpy((char *)msg->_u.write_msg.buf,STARTING_EXA);
-	msg->_u.write_msg.len = strlen(STARTING_EXA);
+	msg->_u.io_msg.fd = 1;
+	strcpy((char *)msg->_u.io_msg.buf,STARTING_EXA);
+	msg->_u.io_msg.len = strlen(STARTING_EXA);
 
 	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+	create_netfs_process();
       }
+      
+    }
+    else if (msg->msg_id == BIND) {
+
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      emscripten_log(EM_LOG_CONSOLE, "BIND %x %s", ((struct sockaddr_un *)&(msg->_u.bind_msg.addr))->sun_family, ((struct sockaddr_un *)&(msg->_u.bind_msg.addr))->sun_path);
+
+      struct vnode * vnode = vfs_find_node((const char *) ((struct sockaddr_un *)&(msg->_u.bind_msg.addr))->sun_path);
+
+      if (vnode) {
+
+	//emscripten_log(EM_LOG_CONSOLE, "vnode found");
+
+	msg->_errno = EADDRINUSE;
+      }
+      else {
+
+	vnode = vfs_create_file((const char *) ((struct sockaddr_un *)&(msg->_u.bind_msg.addr))->sun_path);
+
+	if (vnode) {
+
+	  //emscripten_log(EM_LOG_CONSOLE, "vnode created");
+	}
+	else {
+
+	  //emscripten_log(EM_LOG_CONSOLE, "vnode creation error");
+
+	  msg->_errno = EACCES;
+	}
+      }
+      
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == OPEN) {
 
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
       emscripten_log(EM_LOG_CONSOLE, "OPEN %x %x %s", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
-      msg->msg_id |= 0x80;
-      msg->errno = 0;
+      struct vnode * vnode = vfs_find_node((const char *)msg->_u.open_msg.pathname);
+
+      if (vnode) {
+
+	//emscripten_log(EM_LOG_CONSOLE, "vnode found");
+      }
+      else {
+
+	//emscripten_log(EM_LOG_CONSOLE, "vnode not found");
+
+	if (msg->_u.open_msg.flags & O_CREAT) {
+
+	  //emscripten_log(EM_LOG_CONSOLE, "O_CREAT is set, so we create the file");
+
+	  vnode = vfs_create_file((const char *)msg->_u.open_msg.pathname);
+
+	  if (vnode) {
+
+	    //emscripten_log(EM_LOG_CONSOLE, "vnode created");
+
+	    //vfs_dump();
+	  }
+	  else {
+
+	    //emscripten_log(EM_LOG_CONSOLE, "vnode creation error");
+
+	    msg->_errno = ENOENT;
+	  }
+	}
+	else {
+
+	  msg->_errno = ENOENT;
+	}
+      }
       
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }

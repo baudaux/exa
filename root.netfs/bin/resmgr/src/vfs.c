@@ -148,7 +148,7 @@ struct vnode * vfs_find_node_in_subnodes(struct vnode * vnode, const char * path
   const char * path = pathname;
   const char * path_end = pathname+strlen(pathname);
 
-  //emscripten_log(EM_LOG_CONSOLE, "*** vfs_find_node_in_subnodes: %s", pathname);
+  //emscripten_log(EM_LOG_CONSOLE, "*** vfs_find_node_in_subnodes: %s (%d)", pathname,strlen(pathname));
 
   while (vnode) {
     
@@ -156,8 +156,14 @@ struct vnode * vfs_find_node_in_subnodes(struct vnode * vnode, const char * path
 
     if (strncmp(vnode->name, path, strlen(vnode->name)) == 0) {
 
-      if (strlen(path) == strlen(vnode->name))
+      //emscripten_log(EM_LOG_CONSOLE, "vfs_find_node_in_subnodes: same name %d %d",strlen(path),strlen(vnode->name));
+
+      if (strlen(path) == strlen(vnode->name)) {
+
+	//emscripten_log(EM_LOG_CONSOLE, "vfs_find_node_in_subnodes: found");
+	
 	return vnode;
+      }
 
       if ( (path[strlen(vnode->name)] == '/') || (strcmp(vnode->name, "/") == 0) ) {
 
@@ -195,6 +201,48 @@ struct vnode * vfs_find_node_in_subnodes(struct vnode * vnode, const char * path
 struct vnode * vfs_find_node(const char * pathname) {
 
   return vfs_find_node_in_subnodes(vfs_root, pathname);
+}
+
+struct vnode * vfs_create_file(const char * pathname) {
+
+  //emscripten_log(EM_LOG_CONSOLE, "vfs_create_file: %s",pathname);
+  
+  // find path i.e last '/'
+  char * p = strrchr(pathname,'/');
+
+  if (!p)
+    return NULL;
+
+  //emscripten_log(EM_LOG_CONSOLE, "strrchr: %s",p);
+
+  char * dir = (char *)malloc(p-pathname+1);
+
+  if (!dir)
+    return NULL;
+
+  strncpy(dir,pathname,p-pathname);
+  dir[p-pathname] = 0;
+
+  //emscripten_log(EM_LOG_CONSOLE, "dir: %s",dir);
+
+  // find path in vfs tree
+  struct vnode * vnode = vfs_find_node(dir);
+
+  //emscripten_log(EM_LOG_CONSOLE, "dir vnode: %p",vnode);
+  
+  if (!vnode || (vnode->type != VDIR)) {
+    free(dir);
+    return NULL;
+  }
+
+  //emscripten_log(EM_LOG_CONSOLE, "dir vnode: %s",vnode->name);
+
+  // add file to path
+  struct vnode * vfile = vfs_add_file(vnode,p+1);
+
+  free(dir);
+  
+  return vfile;
 }
 
 void vfs_dump_node(struct vnode * vnode, int indent) {

@@ -16,12 +16,12 @@
 
 #include <emscripten.h>
 
-#define TTY_VERSION "tty v0.1.0"
+#define NETFS_VERSION "netfs v0.1.0"
 
-#define TTY_PATH "/tmp2/tty.peer"
+#define NETFS_PATH "/tmp2/netfs.peer"
 #define RESMGR_PATH "/tmp2/resmgr.peer"
 
-#define NB_TTY_MAX  16
+#define NB_NETFS_MAX  16
 
 struct device_ops {
 
@@ -35,87 +35,44 @@ struct device_ops {
 static unsigned short major;
 static unsigned short minor = 0;
 
-static struct device_ops * devices[NB_TTY_MAX];
+static struct device_ops * devices[NB_NETFS_MAX];
 
 static unsigned short fds[64];
 
-static int local_tty_open(const char * pathname, int flags, mode_t mode) {
-
-  return 1;
-}
-
-static ssize_t local_tty_read(int fd, void * buf, size_t count) {
+static int netfs_open(const char * pathname, int flags, mode_t mode) {
 
   return 0;
 }
 
-static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
+static ssize_t netfs_read(int fd, void * buf, size_t count) {
 
-  EM_ASM({
+  return 0;
+}
 
-      let msg = {};
-      msg.type = 2;
-      msg.data = UTF8ToString($0);
-	  
-      Module["term_channel"].port1.postMessage(msg);
-	  
-    }, buf, count);
+static ssize_t netfs_write(int fd, const void * buf, size_t count) {
+
   
   return 0;
 }
 
-static int local_tty_ioctl(int fildes, int request, ... /* arg */) {
+static int netfs_ioctl(int fildes, int request, ... /* arg */) {
 
   return 0;
 }
 
-static int local_tty_close(int fd) {
+static int netfs_close(int fd) {
 
   return 0;
 }
 
-static struct device_ops local_tty_ops = {
+static struct device_ops netfs_ops = {
 
-  .open = local_tty_open,
-  .read = local_tty_read,
-  .write = local_tty_write,
-  .ioctl = local_tty_ioctl,
-  .close = local_tty_close,
+  .open = netfs_open,
+  .read = netfs_read,
+  .write = netfs_write,
+  .ioctl = netfs_ioctl,
+  .close = netfs_close,
 };
-
-EM_JS(int, probe_terminal, (), {
-
-    let ret = Asyncify.handleSleep(function (wakeUp) {
-				   
-	Module["term_channel"] = new MessageChannel();
-
-	// Listen for messages on port1
-	Module["term_channel"].port1.onmessage = (e) => {
-
-	  console.log("Message from Terminal: "+JSON.stringify(e.data));
-
-	  if (e.data.type == 0) {
-
-	    let msg = {};
-	      msg.type = 2;
-	      msg.data = "[tty v0.1.0]\n\r";
-
-	      Module["term_channel"].port1.postMessage(msg);
-	    
-	    wakeUp(0);
-	  }
-	};
-	   
-	// Transfer port2 to parent window
-
-	let msg = { };
-	msg.type = 0;
-	 
-	window.parent.postMessage(msg, '*', [Module["term_channel"].port2]);
-      });
-
-    return ret;
-});
 
 int register_device(unsigned short minor, struct device_ops * dev_ops) {
 
@@ -137,8 +94,7 @@ int main() {
   socklen_t len;
   char buf[256];
   
-  // Use console.log as tty is not yet started
-  emscripten_log(EM_LOG_CONSOLE,"Starting " TTY_VERSION "...");
+  emscripten_log(EM_LOG_CONSOLE,"Starting " NETFS_VERSION "...");
   
   /* Create the server local socket */
   sock = socket (AF_UNIX, SOCK_DGRAM, 0);
@@ -146,10 +102,10 @@ int main() {
     return -1;
   }
 
-  /* Bind server socket to TTY_PATH */
+  /* Bind server socket to NETFS_PATH */
   memset(&local_addr, 0, sizeof(local_addr));
   local_addr.sun_family = AF_UNIX;
-  strcpy(local_addr.sun_path, TTY_PATH);
+  strcpy(local_addr.sun_path, NETFS_PATH);
   
   if (bind(sock, (struct sockaddr *) &local_addr, sizeof(struct sockaddr_un))) {
     
@@ -163,11 +119,11 @@ int main() {
   struct message * msg = (struct message *)&buf[0];
   
   msg->msg_id = REGISTER_DRIVER;
-  msg->_u.dev_msg.dev_type = CHR_DEV;
+  msg->_u.dev_msg.dev_type = FS_DEV;
   
   memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
   
-  strcpy((char *)&msg->_u.dev_msg.dev_name[0], "tty");
+  strcpy((char *)&msg->_u.dev_msg.dev_name[0], "netfs");
   
   sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
 
@@ -184,25 +140,17 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE,"REGISTER_DRIVER successful: major=%d",major);
 
-      // Probe terminal
-      if (probe_terminal() == 0) {
-
-	minor += 1;
+      minor += 1;
 	
-	register_device(minor, &local_tty_ops);
+      register_device(minor, &netfs_ops);
 
-	// For testing, we create fd 1
-	fds[1] = minor;
+      msg->msg_id = REGISTER_DEVICE;
+      msg->_u.dev_msg.minor = minor;
 
-	// Terminal probed: minor = 1
-	msg->msg_id = REGISTER_DEVICE;
-	msg->_u.dev_msg.minor = minor;
-
-	memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
-	sprintf((char *)&msg->_u.dev_msg.dev_name[0], "tty%d", msg->_u.dev_msg.minor);
+      memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
+      sprintf((char *)&msg->_u.dev_msg.dev_name[0], "tty%d", msg->_u.dev_msg.minor);
   
-	sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
-      }
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
     }
     else if (msg->msg_id == (REGISTER_DEVICE|0x80)) {
 
@@ -213,7 +161,7 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      int fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode);
+      int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode);
 
       fds[fd] = minor;
 
@@ -225,13 +173,17 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      
+      devices[fds[msg->_u.io_msg.fd]]->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
     }
     else if (msg->msg_id == WRITE) {
       
-      get_device(fds[msg->_u.io_msg.fd])->write(-1, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      devices[fds[msg->_u.io_msg.fd]]->write(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
     }
     else if (msg->msg_id == IOCTL) {
+
+      
+    }
+    else if (msg->msg_id == CLOSE) {
 
       
     }
