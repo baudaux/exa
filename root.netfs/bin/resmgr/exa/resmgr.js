@@ -2887,6 +2887,7 @@ var ASM_CONSTS = {
           timestamp: Math.max(atime, mtime)
         });
       },open:(path, flags, mode) => {
+  	  
         if (path === "") {
           throw new FS.ErrnoError(44);
         }
@@ -3289,12 +3290,13 @@ var ASM_CONSTS = {
   
         FS.ensureErrnoError();
   
+  	/* Modified by Benoit Baudaux 4/1/2023 */
         // Allow Module.stdin etc. to provide defaults, if none explicitly passed to us here
         Module['stdin'] = input || Module['stdin'];
         Module['stdout'] = output || Module['stdout'];
         Module['stderr'] = error || Module['stderr'];
   
-        FS.createStandardStreams();
+        /*FS.createStandardStreams();*/
       },quit:() => {
         FS.init.initialized = false;
         // force-flush all streams, so we get musl std streams printed out
@@ -3769,17 +3771,17 @@ var ASM_CONSTS = {
           throw new FS.ErrnoError(66); // if SOCK_STREAM, must be tcp or 0.
   	}*/
   
-  	if (!Module['sockets']) {
+  	if (!Module['fd_table']) {
   
-  	    Module['sockets'] = {};
-  	    Module['sockets'].last_socket = 0;
+  	    Module['fd_table'] = {};
+  	    Module['fd_table'].last_fd = 2;
   	}
   
-  	Module['sockets'].last_socket += 1;
+  	Module['fd_table'].last_fd += 1;
   
   	// create our internal socket structure
   	var sock = {
-  	    fd: Module['sockets'].last_socket,
+  	    fd: Module['fd_table'].last_fd,
               family: family,
               type: type,
               protocol: protocol,
@@ -3795,7 +3797,7 @@ var ASM_CONSTS = {
   	    sock_ops: SOCKFS.unix_dgram_sock_ops
   	};
   
-  	Module['sockets'][Module['sockets'].last_socket] = sock;
+  	Module['fd_table'][Module['fd_table'].last_fd] = sock;
   
   	/*
         // create the filesystem node to store the socket structure
@@ -3824,7 +3826,7 @@ var ASM_CONSTS = {
           return null;
         }
         return stream.node.sock;*/
-  	return Module['sockets'][fd];
+  	return Module['fd_table'][fd];
       },stream_ops:{poll:function(stream) {
           var sock = stream.node.sock;
           return sock.sock_ops.poll(sock);
@@ -5910,7 +5912,7 @@ var ASM_CONSTS = {
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];

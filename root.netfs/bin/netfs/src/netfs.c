@@ -1,5 +1,13 @@
 /*
- * Copyright (C) 2022 Benoit Baudaux
+ * Copyright (C) 2023 Benoit Baudaux
+ *
+ * This file is part of EXA.
+ *
+ * EXA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ * EXA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with EXA. If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <string.h>
@@ -95,6 +103,8 @@ int main() {
   char buf[256];
   
   emscripten_log(EM_LOG_CONSOLE,"Starting " NETFS_VERSION "...");
+
+  int fd = open("/dev/tty1",O_RDWR);
   
   /* Create the server local socket */
   sock = socket (AF_UNIX, SOCK_DGRAM, 0);
@@ -148,7 +158,7 @@ int main() {
       msg->_u.dev_msg.minor = minor;
 
       memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
-      sprintf((char *)&msg->_u.dev_msg.dev_name[0], "tty%d", msg->_u.dev_msg.minor);
+      sprintf((char *)&msg->_u.dev_msg.dev_name[0], "netfs%d", msg->_u.dev_msg.minor);
   
       sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
     }

@@ -1,5 +1,13 @@
 /*
- * Copyright (C) 2022 Benoit Baudaux
+ * Copyright (C) 2023 Benoit Baudaux
+ *
+ * This file is part of EXA.
+ *
+ * EXA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ * EXA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with EXA. If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <string.h>
@@ -41,6 +49,8 @@ static unsigned short fds[64];
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode) {
 
+  emscripten_log(EM_LOG_CONSOLE,"local_tty_open");
+  
   return 1;
 }
 
@@ -135,7 +145,7 @@ int main() {
   struct sockaddr_un local_addr, resmgr_addr, remote_addr;
   int bytes_rec;
   socklen_t len;
-  char buf[256];
+  char buf[1256];
   
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE,"Starting " TTY_VERSION "...");
@@ -173,7 +183,9 @@ int main() {
 
   while (1) {
     
-    bytes_rec = recvfrom(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, &len);
+    bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
+
+    emscripten_log(EM_LOG_CONSOLE, "tty: recfrom: %d", bytes_rec);
 
     if (msg->msg_id == (REGISTER_DRIVER|0x80)) {
 
@@ -182,7 +194,7 @@ int main() {
 
       major = msg->_u.dev_msg.major;
 
-      emscripten_log(EM_LOG_CONSOLE,"REGISTER_DRIVER successful: major=%d",major);
+      emscripten_log(EM_LOG_CONSOLE, "REGISTER_DRIVER successful: major=%d", major);
 
       // Probe terminal
       if (probe_terminal() == 0) {
@@ -212,6 +224,8 @@ int main() {
       emscripten_log(EM_LOG_CONSOLE,"REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
     }
     else if (msg->msg_id == OPEN) {
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN %d",msg->_u.open_msg.minor);
 
       int fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode);
 

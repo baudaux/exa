@@ -2887,6 +2887,7 @@ var ASM_CONSTS = {
           timestamp: Math.max(atime, mtime)
         });
       },open:(path, flags, mode) => {
+  	  
         if (path === "") {
           throw new FS.ErrnoError(44);
         }
@@ -3289,12 +3290,13 @@ var ASM_CONSTS = {
   
         FS.ensureErrnoError();
   
+  	/* Modified by Benoit Baudaux 4/1/2023 */
         // Allow Module.stdin etc. to provide defaults, if none explicitly passed to us here
         Module['stdin'] = input || Module['stdin'];
         Module['stdout'] = output || Module['stdout'];
         Module['stderr'] = error || Module['stderr'];
   
-        FS.createStandardStreams();
+        /*FS.createStandardStreams();*/
       },quit:() => {
         FS.init.initialized = false;
         // force-flush all streams, so we get musl std streams printed out
@@ -3769,17 +3771,17 @@ var ASM_CONSTS = {
           throw new FS.ErrnoError(66); // if SOCK_STREAM, must be tcp or 0.
   	}*/
   
-  	if (!Module['sockets']) {
+  	if (!Module['fd_table']) {
   
-  	    Module['sockets'] = {};
-  	    Module['sockets'].last_socket = 0;
+  	    Module['fd_table'] = {};
+  	    Module['fd_table'].last_fd = 2;
   	}
   
-  	Module['sockets'].last_socket += 1;
+  	Module['fd_table'].last_fd += 1;
   
   	// create our internal socket structure
   	var sock = {
-  	    fd: Module['sockets'].last_socket,
+  	    fd: Module['fd_table'].last_fd,
               family: family,
               type: type,
               protocol: protocol,
@@ -3795,7 +3797,7 @@ var ASM_CONSTS = {
   	    sock_ops: SOCKFS.unix_dgram_sock_ops
   	};
   
-  	Module['sockets'][Module['sockets'].last_socket] = sock;
+  	Module['fd_table'][Module['fd_table'].last_fd] = sock;
   
   	/*
         // create the filesystem node to store the socket structure
@@ -3824,7 +3826,7 @@ var ASM_CONSTS = {
           return null;
         }
         return stream.node.sock;*/
-  	return Module['sockets'][fd];
+  	return Module['fd_table'][fd];
       },stream_ops:{poll:function(stream) {
           var sock = stream.node.sock;
           return sock.sock_ops.poll(sock);
@@ -4911,6 +4913,110 @@ var ASM_CONSTS = {
   }
   }
 
+  function ___syscall_openat(dirfd, path, flags, varargs) {
+  SYSCALLS.varargs = varargs;
+  try {
+  
+  
+  	/* Modified by Benoit Baudaux 4/1/2023 */
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    if (window.frameElement.getAttribute('pid') != "1") {
+  
+  		var mode = varargs ? SYSCALLS.get() : 0;
+  
+  		let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  
+  		let buf = Module._malloc(1256);
+  
+  		Module.HEAPU8[buf] = 11; // OPEN
+  		
+  		/*//padding
+  		  buf[1] = 0;
+  		  buf[2] = 0;
+  		  buf[3] = 0;*/
+  
+  		// errno
+  		Module.HEAPU8[buf+4] = 0x0;
+  		Module.HEAPU8[buf+5] = 0x0;
+  		Module.HEAPU8[buf+6] = 0x0;
+  		Module.HEAPU8[buf+7] = 0x0;
+  
+  		// fd
+  		Module.HEAPU8[buf+8] = 0x0;
+  		Module.HEAPU8[buf+9] = 0x0;
+  		Module.HEAPU8[buf+10] = 0x0;
+  		Module.HEAPU8[buf+11] = 0x0;
+  
+  		// flags
+  		Module.HEAPU8[buf+12] = flags & 0xff;
+  		Module.HEAPU8[buf+13] = (flags >> 8) & 0xff;
+  		Module.HEAPU8[buf+14] = (flags >> 16) & 0xff;
+  		Module.HEAPU8[buf+15] = (flags >> 24) & 0xff;
+  
+  		// pathname
+  		stringToUTF8(UTF8ToString(path),buf+130,1024);
+  
+  		let buf2 = Module.HEAPU8.slice(buf,buf+256);
+  
+  		Module._free(buf);
+  
+  		let open_name = "open."+window.frameElement.getAttribute('pid');
+  
+  		let open_bc = new BroadcastChannel(open_name);
+  
+  		first_response = true;
+  
+  		open_bc.onmessage = (messageEvent) => {
+  
+  		    console.log("open_bc.onmessage");
+  		    console.log(messageEvent);
+  
+  		    if (first_response) { // first response comes from resmgr
+  
+  			first_response = false;
+  
+  			let msg2 = messageEvent.data;
+  
+  			msg2.buf[0] = 11;
+  
+  			msg2.from = open_name;
+  
+  			let peer = UTF8ArrayToString(msg2.buf, 22, 108);
+  
+  			console.log("forward to "+peer);
+  			
+  			let open_driver_bc = new BroadcastChannel(peer);
+  
+  			open_driver_bc.postMessage(msg);
+  		    }
+  		};
+  
+  		let msg = {
+  
+  		    from: open_name,
+  		    buf: buf2,
+  		    len: 1256
+  		};
+  		
+  		bc.postMessage(msg);
+  		
+  	    }
+  	});
+  
+  	return ret;
+  	
+      /*path = SYSCALLS.getStr(path);
+      path = SYSCALLS.calculateAt(dirfd, path);
+      var mode = varargs ? SYSCALLS.get() : 0;
+      return FS.open(path, flags, mode).fd;*/
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   /** @param {number=} addrlen */
   function writeSockaddr(sa, family, addr, port, addrlen) {
       switch (family) {
@@ -5754,7 +5860,7 @@ var ASM_CONSTS = {
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6152,6 +6258,7 @@ function checkIncomingModuleAPI() {
 var asmLibraryArg = {
   "__syscall_bind": ___syscall_bind,
   "__syscall_fcntl64": ___syscall_fcntl64,
+  "__syscall_openat": ___syscall_openat,
   "__syscall_recvfrom": ___syscall_recvfrom,
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_socket": ___syscall_socket,

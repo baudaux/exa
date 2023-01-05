@@ -1,5 +1,13 @@
 /*
- * Copyright (C) 2022 Benoit Baudaux
+ * Copyright (C) 2023 Benoit Baudaux
+ *
+ * This file is part of EXA.
+ *
+ * EXA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ * EXA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with EXA. If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <string.h>
@@ -31,7 +39,7 @@ int main() {
   struct sockaddr_un local_addr, remote_addr;
   int bytes_rec;
   socklen_t len;
-  char buf[256];
+  char buf[1256];
 
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE, "Starting resmgr v0.1.0 ...");
@@ -43,6 +51,8 @@ int main() {
   /* Create the server local socket */
   sock = socket(AF_UNIX, SOCK_DGRAM, 0);
 
+  // TODO: Add close on exec
+  
   memset(&local_addr, 0, sizeof(local_addr));
   local_addr.sun_family = AF_UNIX;
   strcpy(local_addr.sun_path, RESMGR_PATH);
@@ -60,7 +70,7 @@ int main() {
   
   while (1) {
     
-    bytes_rec = recvfrom(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, &len);
+    bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
 
     struct message * msg = (struct message *)&buf[0];
 
@@ -149,41 +159,40 @@ int main() {
       emscripten_log(EM_LOG_CONSOLE, "OPEN %x %x %s", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
       struct vnode * vnode = vfs_find_node((const char *)msg->_u.open_msg.pathname);
-
       if (vnode) {
 
-	//emscripten_log(EM_LOG_CONSOLE, "vnode found");
-      }
-      else {
+	//emscripten_log(EM_LOG_CONSOLE, "vnode found: %s",vnode->name);
 
-	//emscripten_log(EM_LOG_CONSOLE, "vnode not found");
+	if (vnode->type == VDEV) {
 
-	if (msg->_u.open_msg.flags & O_CREAT) {
+	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor);
 
-	  //emscripten_log(EM_LOG_CONSOLE, "O_CREAT is set, so we create the file");
+	  msg->_u.open_msg.fd = -1;
+	  //TODO: msg->_u.open_msg.type = vnode->_u.dev.type;
+	  msg->_u.open_msg.major = vnode->_u.dev.major;
+	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
+	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	}
+	else if (vnode->type == VFILE) {
 
-	  vnode = vfs_create_file((const char *)msg->_u.open_msg.pathname);
-
-	  if (vnode) {
-
-	    //emscripten_log(EM_LOG_CONSOLE, "vnode created");
-
-	    //vfs_dump();
-	  }
-	  else {
-
-	    //emscripten_log(EM_LOG_CONSOLE, "vnode creation error");
-
-	    msg->_errno = ENOENT;
-	  }
+	  // TODO
 	}
 	else {
 
-	  msg->_errno = ENOENT;
+	  // TODO
+	}
+      }
+      else {
+
+	emscripten_log(EM_LOG_CONSOLE, "vnode not found");
+
+	if (msg->_u.open_msg.flags & O_CREAT) {
+
+	  // TODO
 	}
       }
       
-      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     
   }
