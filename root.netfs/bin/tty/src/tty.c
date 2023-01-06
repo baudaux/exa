@@ -40,18 +40,30 @@ struct device_ops {
   int (*close)(int fd);
 };
 
+struct client {
+
+  pid_t pid;
+  unsigned short minor;
+  int flags;
+  unsigned short mode;
+};
+
 static unsigned short major;
 static unsigned short minor = 0;
 
 static struct device_ops * devices[NB_TTY_MAX];
 
-static unsigned short fds[64];
+static int last_fd = -1;
+
+static struct client clients[64];
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode) {
 
   emscripten_log(EM_LOG_CONSOLE,"local_tty_open");
+
+  ++last_fd;
   
-  return 1;
+  return last_fd;
 }
 
 static ssize_t local_tty_read(int fd, void * buf, size_t count) {
@@ -139,6 +151,21 @@ struct device_ops * get_device(unsigned short minor) {
   return devices[minor];
 }
 
+struct device_ops * get_device_from_fd(int fd) {
+
+  return devices[clients[fd].minor];
+}
+
+int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned short mode) {
+
+  clients[fd].pid = pid;
+  clients[fd].minor = minor;
+  clients[fd].flags = flags;
+  clients[fd].mode = mode;
+
+  return fd;
+}
+
 int main() {
 
   int sock;
@@ -185,7 +212,7 @@ int main() {
     
     bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
 
-    emscripten_log(EM_LOG_CONSOLE, "tty: recfrom: %d", bytes_rec);
+    //emscripten_log(EM_LOG_CONSOLE, "tty: recfrom: %d", bytes_rec);
 
     if (msg->msg_id == (REGISTER_DRIVER|0x80)) {
 
@@ -202,9 +229,6 @@ int main() {
 	minor += 1;
 	
 	register_device(minor, &local_tty_ops);
-
-	// For testing, we create fd 1
-	fds[1] = minor;
 
 	// Terminal probed: minor = 1
 	msg->msg_id = REGISTER_DEVICE;
@@ -225,16 +249,16 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN %d",msg->_u.open_msg.minor);
+      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN %d %d",msg->_u.open_msg.minor,msg->pid);
 
       int fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode);
 
-      fds[fd] = minor;
+      add_client(fd, msg->pid, msg->_u.open_msg.minor, msg->_u.open_msg.flags, msg->_u.open_msg.mode);
 
       msg->_u.open_msg.fd = fd;
 
       msg->msg_id |= 0x80;
-      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
       
     }
     else if (msg->msg_id == READ) {
@@ -242,8 +266,15 @@ int main() {
       
     }
     else if (msg->msg_id == WRITE) {
+
+      if (msg->_u.io_msg.fd == -1) {
+
+	get_device(1)->write(-1, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      }
+      else {
       
-      get_device(fds[msg->_u.io_msg.fd])->write(-1, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+	get_device_from_fd(msg->_u.io_msg.fd)->write(-1, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      }
     }
     else if (msg->msg_id == IOCTL) {
 

@@ -102,9 +102,12 @@ int main() {
   socklen_t len;
   char buf[256];
   
-  emscripten_log(EM_LOG_CONSOLE,"Starting " NETFS_VERSION "...");
+  emscripten_log(EM_LOG_CONSOLE, "Starting " NETFS_VERSION "...");
 
-  int fd = open("/dev/tty1",O_RDWR);
+  int fd = open("/dev/tty1", O_RDWR);
+  
+  if (fd >= 0)
+    write(fd, "\n\r[" NETFS_VERSION "]", strlen("\n\r[" NETFS_VERSION "]")+1);
   
   /* Create the server local socket */
   sock = socket (AF_UNIX, SOCK_DGRAM, 0);
@@ -183,11 +186,11 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      devices[fds[msg->_u.io_msg.fd]]->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      //devices[fds[msg->_u.io_msg.fd]]->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
     }
     else if (msg->msg_id == WRITE) {
       
-      devices[fds[msg->_u.io_msg.fd]]->write(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      //devices[fds[msg->_u.io_msg.fd]]->write(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
     }
     else if (msg->msg_id == IOCTL) {
 

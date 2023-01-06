@@ -31,7 +31,7 @@
 #define RESMGR_FILE "resmgr.peer"
 #define RESMGR_PATH RESMGR_ROOT "/" RESMGR_FILE
 
-#define STARTING_EXA "Starting EXA v0.1.0..."
+#define STARTING_EXA "\n\rStarting EXA v0.1.0..."
 
 int main() {
 
@@ -108,7 +108,7 @@ int main() {
 	
 	memset(buf,0,256);
 	msg->msg_id = WRITE;
-	msg->_u.io_msg.fd = 1;
+	msg->_u.io_msg.fd = -1; // minor == 1
 	strcpy((char *)msg->_u.io_msg.buf,STARTING_EXA);
 	msg->_u.io_msg.len = strlen(STARTING_EXA);
 

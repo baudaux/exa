@@ -7,7 +7,7 @@
  *
  * EXA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with EXA. If not, see <https://www.gnu.org/licenses/>. 4
+ * You should have received a copy of the GNU General Public License along with EXA. If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef _MSG_H
@@ -76,6 +76,8 @@ struct io_message {
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
+  
+  pid_t pid;
 
   int _errno;
 
