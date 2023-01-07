@@ -144,6 +144,17 @@ struct vnode * vfs_add_dev(struct vnode * parent, const char * name, unsigned ch
   return vn;
 }
 
+int vfs_set_dev(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor) {
+
+  node->type = VDEV;
+
+  node->_u.dev.type = type;
+  node->_u.dev.major = major;
+  node->_u.dev.minor = minor;
+    
+  return 0;
+}
+
 struct vnode * vfs_add_path(const char * pathname) {
 
   //TODO

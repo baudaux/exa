@@ -44,7 +44,7 @@ enum dev_type {
 
 struct device_message {
 
-  unsigned char dev_type; /* enum blk_or_chr */
+  unsigned char dev_type; /* enum dev_type */
   unsigned char dev_name[DEV_NAME_LENGTH_MAX];
   unsigned short major;
   unsigned short minor;
@@ -73,6 +73,14 @@ struct io_message {
   unsigned char buf[];
 };
 
+struct mount_message {
+
+  unsigned char dev_type;
+  unsigned short major;
+  unsigned short minor;
+  char pathname[1024];
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -87,6 +95,7 @@ struct message {
     struct bind_message bind_msg;
     struct open_message open_msg;
     struct io_message io_msg;
+    struct mount_message mount_msg;
   } _u;
 };
 

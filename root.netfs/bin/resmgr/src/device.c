@@ -24,8 +24,6 @@ static unsigned short majors[3];
 static struct driver drivers[3][NB_DEV_MAX];
 static struct device * devices;
 
-static struct vnode * vfs_dev;
-
 int add_driver(unsigned short major, unsigned char type, const char * name, const char * peer);
 
 void device_init() {
@@ -37,7 +35,10 @@ void device_init() {
   struct vnode * vnode = vfs_find_node("/");
 
   // Add /dev
-  vfs_dev = vfs_add_dir(vnode,"dev");
+  vfs_add_dir(vnode,"dev");
+
+  // Add /bin for netfs
+  vfs_add_dir(vnode,"bin");
 
   // Add /tmp2 for early storage (socket path for example)
   vfs_add_dir(vnode,"tmp2");
@@ -86,6 +87,12 @@ int device_register_device(unsigned char type, unsigned short major, unsigned sh
 
     d->next = dev;
   }
+
+  // Add device in /dev
+  struct vnode * vnode = vfs_find_node("/dev");
+  
+  if (vnode)
+    vfs_add_dev(vnode, name, type, major, minor);
   
   return 0;
 }
@@ -93,6 +100,21 @@ int device_register_device(unsigned char type, unsigned short major, unsigned sh
 struct driver * device_get_driver(unsigned char type, unsigned short major) {
 
   return &drivers[type][major];
+}
+
+struct device * device_get_device(unsigned char type, unsigned short major, unsigned short minor) {
+
+  struct device * dev = devices;
+
+  while (dev) {
+
+    if ( (dev->type == type) && (dev->major == major) && (dev->minor == minor) )
+      break;
+
+    dev = dev->next;
+  }
+
+  return dev;
 }
 
 int add_driver(unsigned short major, unsigned char type, const char * name, const char * peer) {

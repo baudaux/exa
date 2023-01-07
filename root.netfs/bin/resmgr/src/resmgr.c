@@ -31,12 +31,30 @@
 #define RESMGR_FILE "resmgr.peer"
 #define RESMGR_PATH RESMGR_ROOT "/" RESMGR_FILE
 
-#define STARTING_EXA "\n\rStarting EXA v0.1.0..."
+static char * starting_exa =  "\r\n"
+"         __            __         \r\n"
+"        /  \\----------/  \\        \r\n"
+"        |                |        \r\n"
+"        \\                /        \r\n"
+"         \\              /         \r\n"
+"          \\            /          \r\n"
+"    _______|           |_______   \r\n"
+"   /                           \\  \r\n"
+"  |         EXA v0.1.0          | \r\n"
+"   \\_______            ________/  \r\n"
+"           /           \\          \r\n"
+"	  /             \\          \r\n"
+"	 /               \\         \r\n"
+"	/      _____      \\        \r\n"
+"       /      /     \\      \\      \r\n"
+"      |      /       \\      |     \r\n"
+"      \\_____/         \\_____/     \r\n"
+  "\r\n";
 
 int main() {
 
   int sock;
-  struct sockaddr_un local_addr, remote_addr;
+  struct sockaddr_un local_addr, remote_addr, tty_addr;
   int bytes_rec;
   socklen_t len;
   char buf[1256];
@@ -94,10 +112,8 @@ int main() {
 
       device_register_device(msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor, (const char *)msg->_u.dev_msg.dev_name);
 
-      // Add device in /dev
-      struct vnode * vnode = vfs_find_node("/dev");
-      if (vnode)
-	vfs_add_dev(vnode, (const char *) msg->_u.dev_msg.dev_name, msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
+      char dev_name[DEV_NAME_LENGTH_MAX];
+      strcpy(dev_name, (const char *)msg->_u.dev_msg.dev_name);
 
       msg->msg_id |= 0x80;
       msg->_errno = 0;
@@ -105,18 +121,77 @@ int main() {
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 
       if ( (msg->_u.dev_msg.dev_type == CHR_DEV) && (msg->_u.dev_msg.major == 1) ) {  // First device is tty
-	
-	memset(buf,0,256);
-	msg->msg_id = WRITE;
-	msg->_u.io_msg.fd = -1; // minor == 1
-	strcpy((char *)msg->_u.io_msg.buf,STARTING_EXA);
-	msg->_u.io_msg.len = strlen(STARTING_EXA);
 
-	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	memcpy(&tty_addr, &remote_addr, sizeof(remote_addr));
+
+	for (int i = 0; i < strlen(starting_exa); ) {
+	
+	  memset(buf, 0, 1256);
+	  msg->msg_id = WRITE;
+	  msg->_u.io_msg.fd = -1; // minor == 1
+
+	  int len = (strlen(starting_exa+i) < 1200)?strlen(starting_exa+i):1200;
+	  msg->_u.io_msg.len = len;
+
+	  strncpy((char *)msg->_u.io_msg.buf, starting_exa+i, len);
+	  ((char *)msg->_u.io_msg.buf)[len] = 0;
+
+	  i += len;
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
 
 	create_netfs_process();
       }
+
+      memset(buf, 0, 1256);
+      msg->msg_id = WRITE;
+      msg->_u.io_msg.fd = -1; // minor == 1
+
+      sprintf((char *)msg->_u.io_msg.buf,"\r\n/dev/%s added", dev_name);
+
+      msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
+
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
       
+    }
+    else if (msg->msg_id == MOUNT) {
+
+      struct device * dev = NULL;
+      char pathname[1024];
+
+      emscripten_log(EM_LOG_CONSOLE, "MOUNT %d %d %d %s", msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor, (const char *)&msg->_u.mount_msg.pathname[0]);
+
+      struct vnode * vnode = vfs_find_node((const char *)&msg->_u.mount_msg.pathname[0]);
+  
+      if (vnode && (vnode->type == VDIR)) {
+	vfs_set_dev(vnode, msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor);
+	msg->_errno = 0;
+
+	dev = device_get_device(msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor);
+
+	strcpy((char *)&(pathname[0]), (const char *)&(msg->_u.mount_msg.pathname[0]));
+      }
+      else {
+	msg->_errno = ENOTDIR;
+      }
+
+      msg->msg_id |= 0x80;
+      
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+      if (msg->_errno == 0) {
+
+	memset(buf, 0, 1256);
+	msg->msg_id = WRITE;
+	msg->_u.io_msg.fd = -1; // minor == 1
+
+	sprintf((char *)msg->_u.io_msg.buf,"\r\ndevice %s mounted on %s", (const char *)&(dev->name[0]), (const char *)&(pathname[0]));
+
+	msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
+
+	sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+      }
     }
     else if (msg->msg_id == BIND) {
 

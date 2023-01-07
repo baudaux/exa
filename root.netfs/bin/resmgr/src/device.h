@@ -43,4 +43,6 @@ int device_register_device(unsigned char type, unsigned short major, unsigned sh
 
 struct driver * device_get_driver(unsigned char type, unsigned short major);
 
+struct device * device_get_device(unsigned char type, unsigned short major, unsigned short minor);
+
 #endif // _DEVICE_H
