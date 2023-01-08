@@ -3,6 +3,5 @@
 /tmp.build
 **/node_modules
 **/bin/bash
-**/bin/sysvinit
 .DS_Store
 *~

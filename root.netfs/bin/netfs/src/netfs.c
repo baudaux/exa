@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <stropts.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "msg.h"
 
@@ -69,26 +70,39 @@ int add_fd_entry(int fd, pid_t pid, unsigned short minor, const char * pathname,
   return fd;
 }
 
-EM_JS(int, do_fetch, (const char * pathname), {
+EM_JS(int, do_fetch_head, (const char * pathname), {
     
   return Asyncify.handleSleep(function (wakeUp) {
+
+      var myHeaders = new Headers();
+
+      var myInit = { method: 'HEAD',
+	headers: myHeaders,
+	mode: 'cors',
+	cache: 'default' };
       
-      fetch(UTF8ToString(pathname)).then(function (response) {
-      
-      wakeUp(0);
+      fetch(UTF8ToString(pathname), myInit).then(function (response) {
+
+	  if (response.ok)
+	    wakeUp(0);
+	  else
+	    wakeUp(-1);
     });
   });
 });
 
 static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
-  ++last_fd;
+  if (do_fetch_head(pathname) == 0) {
 
-  do_fetch(pathname);
-
-  add_fd_entry(last_fd, pid, minor, pathname, flags, mode);
+    ++last_fd;
+    
+    add_fd_entry(last_fd, pid, minor, pathname, flags, mode);
   
-  return last_fd;
+    return last_fd;
+  }
+
+  return -1;
 }
 
 static ssize_t netfs_read(int fd, void * buf, size_t count) {
@@ -232,7 +246,17 @@ int main() {
 
       int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.dev_msg.minor);
 
-      msg->_u.open_msg.fd = fd;
+      if (fd >= 0) {
+
+	msg->_u.open_msg.fd = fd;
+	msg->_errno = 0;
+      }
+      else {
+
+	msg->_u.open_msg.fd = -1;
+	msg->_errno = ENOENT;
+      }
+	
 
       msg->msg_id |= 0x80;
       sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     

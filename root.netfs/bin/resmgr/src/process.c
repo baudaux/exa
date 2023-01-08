@@ -29,32 +29,7 @@ void process_init() {
   // Add /proc
   vfs_proc = vfs_add_dir(vnode,"proc");
 
-  add_process(RESMGR_ID,NO_PARENT);
-}
-
-pid_t create_tmpfs_process() {
-
-  pid_t pid = fork();
-  
-  if (pid == -1) { // Error
-    
-    emscripten_log(EM_LOG_CONSOLE,"Error while creating tmpfs process ...");
-    return -1;
-    
-  } else if (pid == 0) { // Child process
-
-    emscripten_log(EM_LOG_CONSOLE,"starting tmpfs process...");
-
-    execl ("/bin/tmpfs", "tmpfs", (void*)0);
-    
-  } else { // Parent process
-
-    emscripten_log(EM_LOG_CONSOLE,"tmpfs process created: %d",pid);
-
-    return pid;
-  }
-
-  return 0;
+  add_process(RESMGR_ID, NO_PARENT);
 }
 
 pid_t create_tty_process() {
@@ -108,6 +83,26 @@ pid_t create_netfs_process() {
 }
 
 pid_t create_init_process() {
+
+  pid_t pid = fork();
+  
+  if (pid == -1) { // Error
+    
+    emscripten_log(EM_LOG_CONSOLE,"Error while creating init process ...");
+    return -1;
+    
+  } else if (pid == 0) { // Child process
+
+    emscripten_log(EM_LOG_CONSOLE,"starting init process...");
+
+    execl ("/bin/sysvinit", "init", (void*)0);
+    
+  } else { // Parent process
+    
+    emscripten_log(EM_LOG_CONSOLE,"init process created: %d",pid);
+
+    return pid;
+  }
 
   return 0;
 }

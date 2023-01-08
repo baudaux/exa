@@ -191,6 +191,21 @@ int main() {
 	msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
 
 	sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+
+	if (strcmp((const char *)&(pathname[0]),"/bin") == 0) {
+
+	  memset(buf, 0, 1256);
+	  msg->msg_id = WRITE;
+	  msg->_u.io_msg.fd = -1; // minor == 1
+
+	  sprintf((char *)msg->_u.io_msg.buf,"\r\nstart sysvinit");
+
+	  msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+
+	  create_init_process();
+	}
       }
     }
     else if (msg->msg_id == BIND) {

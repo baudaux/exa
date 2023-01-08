@@ -25,12 +25,13 @@ struct process {
 
   pid_t id;
   pid_t parent_id;
+
+  mode_t umask;
   
 };
 
 void process_init();
 
-pid_t create_tmpfs_process();
 pid_t create_tty_process();
 pid_t create_netfs_process();
 pid_t create_init_process();

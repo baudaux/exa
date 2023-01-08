@@ -1175,7 +1175,7 @@ var tempI64;
 var ASM_CONSTS = {
   
 };
-function do_fetch(pathname) { return Asyncify.handleSleep(function (wakeUp) { fetch(UTF8ToString(pathname)).then(function (response) { wakeUp(0); }); }); }
+function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers(); var myInit = { method: 'HEAD', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) wakeUp(0); else wakeUp(-1); }); }); }
 
 
 
@@ -6005,7 +6005,7 @@ function do_fetch(pathname) { return Asyncify.handleSleep(function (wakeUp) { fe
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.do_fetch","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6408,7 +6408,7 @@ var asmLibraryArg = {
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_socket": ___syscall_socket,
   "__syscall_write": ___syscall_write,
-  "do_fetch": do_fetch,
+  "do_fetch_head": do_fetch_head,
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap
@@ -6501,7 +6501,7 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
 var ___start_em_js = Module['___start_em_js'] = 1772;
-var ___stop_em_js = Module['___stop_em_js'] = 1927;
+var ___stop_em_js = Module['___stop_em_js'] = 2085;
 
 
 
