@@ -4912,6 +4912,17 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   }
   }
 
+  function ___syscall_getpid() {
+  try {
+  
+  
+  	return parseInt(window.frameElement.getAttribute('pid'));;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   /** @param {number=} addrlen */
   function writeSockaddr(sa, family, addr, port, addrlen) {
       switch (family) {
@@ -5787,7 +5798,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6185,6 +6196,7 @@ function checkIncomingModuleAPI() {
 var asmLibraryArg = {
   "__syscall_bind": ___syscall_bind,
   "__syscall_fcntl64": ___syscall_fcntl64,
+  "__syscall_getpid": ___syscall_getpid,
   "__syscall_recvfrom": ___syscall_recvfrom,
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_socket": ___syscall_socket,

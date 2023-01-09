@@ -13,14 +13,25 @@
 #include "process.h"
 #include "vfs.h"
 
+#include <string.h>
+#include <signal.h>
+
+
 #include <emscripten.h>
 
-static struct process processes[NB_PROCESS_MAX];
+#define NO_PARENT 0
+
+#define RESMGR_ID 1
+#define TTY_ID    2
+#define NETFS_ID  3
+#define INIT_ID   4
+
+static struct process processes[NB_PROCESSES_MAX];
 static int nb_processes = 0;
 
 static struct vnode * vfs_proc;
 
-void add_process(pid_t id, pid_t parent_id);
+pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd);
 
 void process_init() {
 
@@ -29,10 +40,17 @@ void process_init() {
   // Add /proc
   vfs_proc = vfs_add_dir(vnode,"proc");
 
-  add_process(RESMGR_ID, NO_PARENT);
+  for (int i = 0; i < NB_PROCESSES_MAX; ++i) {
+
+    processes[i].pid = -1;
+  }
+
+  fork_process(RESMGR_ID, NO_PARENT, "resmgr", "/bin/resmgr");
 }
 
 pid_t create_tty_process() {
+
+  fork_process(TTY_ID, NO_PARENT, "tty", "/bin/tty");
 
   pid_t pid = fork();
   
@@ -59,6 +77,8 @@ pid_t create_tty_process() {
 
 pid_t create_netfs_process() {
 
+  fork_process(NETFS_ID, NO_PARENT, "netfs", "/bin/netfs");
+  
   pid_t pid = fork();
   
   if (pid == -1) { // Error
@@ -84,6 +104,8 @@ pid_t create_netfs_process() {
 
 pid_t create_init_process() {
 
+  fork_process(INIT_ID, NO_PARENT, "init", "/bin/init");
+  
   pid_t pid = fork();
   
   if (pid == -1) { // Error
@@ -107,10 +129,76 @@ pid_t create_init_process() {
   return 0;
 }
 
-void add_process(pid_t id, pid_t parent_id) {
+pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
-  processes[nb_processes].id = id;
-  processes[nb_processes].parent_id = parent_id;
+  if (pid < 0)
+    pid = nb_processes;
+  else
+    nb_processes = pid;
+
+  if (pid >= NB_PROCESSES_MAX)
+    return -1;
+
+  processes[pid].proc_state = RUNNING_STATE;
+  
+  processes[pid].pid = pid;
+  processes[pid].ppid = ppid;
+
+  if (ppid >= 0) {
+
+    processes[pid].pgid =  processes[ppid].pgid;
+    processes[pid].sid =  processes[ppid].sid;
+    processes[pid].term =  processes[ppid].term;
+    
+  }
+  else {
+
+    processes[pid].pgid = 0;
+    processes[pid].sid = 0;
+    processes[pid].term =  NULL;
+  }
+
+  strcpy(processes[pid].name, name);
+  strcpy(processes[pid].cwd, cwd);
+
+  if (ppid >= 0) {
+    processes[pid].umask = processes[ppid].umask;
+    memcpy(&processes[pid].sigprocmask, &processes[ppid].sigprocmask, sizeof(sigset_t));
+  }
+
+  sigemptyset(&processes[pid].pendingsig);
+    
+  for (int i=0; i < NB_FILES_MAX; ++i) {
+
+    processes[pid].fds[i].fd = -1;
+  }
+
+  if (ppid >= 0) {
+
+    for (int i=0; i < NB_FILES_MAX; ++i) {
+
+      if (processes[ppid].fds[i].fd >= 0) {
+	processes[pid].fds[i].fd = processes[ppid].fds[i].fd;
+	processes[pid].fds[i].remote_fd = processes[ppid].fds[i].remote_fd;
+	processes[pid].fds[i].type = processes[ppid].fds[i].type;
+	processes[pid].fds[i].major = processes[ppid].fds[i].major;
+	processes[pid].fds[i].minor = processes[ppid].fds[i].minor;
+	strcpy(processes[pid].fds[i].peer, processes[ppid].fds[i].peer);
+      }
+    }
+  }
   
   ++nb_processes;
+
+  return pid;
+}
+
+void dump_processes() {
+
+  emscripten_log(EM_LOG_CONSOLE,"**** processes ****");
+
+  for (int i = 0; i < nb_processes; ++i) {
+
+    emscripten_log(EM_LOG_CONSOLE,"* %d %d %s %d",processes[i].pid, processes[i].ppid, processes[i].name, processes[i].proc_state);
+  }
 }

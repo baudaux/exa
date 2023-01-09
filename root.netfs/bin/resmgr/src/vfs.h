@@ -20,7 +20,8 @@ enum vnode_type {
   VDIR = 0,
   VFILE,
   VSYMLINK,
-  VDEV
+  VDEV,
+  VMOUNT
 };
 
 struct vnode {
@@ -41,7 +42,7 @@ struct vnode {
       size_t file_size;
     } file;
     struct {
-      struct vnode * vnode;  /* Used for memorizing children when a node switches from VDIR to VDEV (mount) and vice versa (umount) */
+      struct vnode * vnode;  /* Used for memorizing children when a node switches from VDIR to VMOUNT (mount) and vice versa (umount) */
       unsigned char type;
       unsigned short major;
       unsigned short minor;
@@ -61,7 +62,7 @@ struct vnode * vfs_add_dir(struct vnode * parent, const char * name);
 struct vnode * vfs_add_symlink(struct vnode * parent, const char * name, const char * symlink, struct vnode * link);
 struct vnode * vfs_add_dev(struct vnode * parent, const char * name, unsigned char type, unsigned short major, unsigned short minor);
 
-int vfs_set_dev(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor);
+int vfs_set_mount(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor);
 
 struct vnode * vfs_add_path(const char * pathname);
 

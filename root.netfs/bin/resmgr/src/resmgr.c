@@ -114,13 +114,14 @@ int main() {
 
       char dev_name[DEV_NAME_LENGTH_MAX];
       strcpy(dev_name, (const char *)msg->_u.dev_msg.dev_name);
+      unsigned char dev_type = msg->_u.dev_msg.dev_type;
 
       msg->msg_id |= 0x80;
       msg->_errno = 0;
       
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 
-      if ( (msg->_u.dev_msg.dev_type == CHR_DEV) && (msg->_u.dev_msg.major == 1) ) {  // First device is tty
+      if ( (msg->_u.dev_msg.dev_type == CHR_DEV) && (msg->_u.dev_msg.major == 1) && (msg->_u.dev_msg.minor == 1) ) {  // First device is tty
 
 	memcpy(&tty_addr, &remote_addr, sizeof(remote_addr));
 
@@ -144,15 +145,21 @@ int main() {
 	create_netfs_process();
       }
 
-      memset(buf, 0, 1256);
-      msg->msg_id = WRITE;
-      msg->_u.io_msg.fd = -1; // minor == 1
+      // add char and block devices to /dev
+      if ( (dev_type == CHR_DEV) || (dev_type == BLK_DEV) ) {
 
-      sprintf((char *)msg->_u.io_msg.buf,"\r\n/dev/%s added", dev_name);
+	  memset(buf, 0, 1256);
+	  msg->msg_id = WRITE;
+	  msg->_u.io_msg.fd = -1; // minor == 1
 
-      msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
+	  sprintf((char *)msg->_u.io_msg.buf,"\r\n/dev/%s added", dev_name);
 
-      sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+	  msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+
+	  emscripten_log(EM_LOG_CONSOLE, "Send msg to %s", tty_addr.sun_path);
+	}
       
     }
     else if (msg->msg_id == MOUNT) {
@@ -165,7 +172,7 @@ int main() {
       struct vnode * vnode = vfs_find_node((const char *)&msg->_u.mount_msg.pathname[0]);
   
       if (vnode && (vnode->type == VDIR)) {
-	vfs_set_dev(vnode, msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor);
+	vfs_set_mount(vnode, msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor);
 	msg->_errno = 0;
 
 	dev = device_get_device(msg->_u.mount_msg.dev_type, msg->_u.mount_msg.major, msg->_u.mount_msg.minor);
@@ -205,6 +212,8 @@ int main() {
 	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
 
 	  create_init_process();
+
+	  dump_processes();
 	}
       }
     }
@@ -243,25 +252,34 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      msg->msg_id |= 0x80;
-      msg->_errno = 0;
-
       emscripten_log(EM_LOG_CONSOLE, "OPEN %x %x %s", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
       struct vnode * vnode = vfs_find_node((const char *)msg->_u.open_msg.pathname);
       if (vnode) {
 
-	//emscripten_log(EM_LOG_CONSOLE, "vnode found: %s",vnode->name);
+	emscripten_log(EM_LOG_CONSOLE, "vnode found: %s",vnode->name);
 
 	if (vnode->type == VDEV) {
 
 	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor);
 
-	  msg->_u.open_msg.fd = -1;
-	  //TODO: msg->_u.open_msg.type = vnode->_u.dev.type;
+	  msg->msg_id |= 0x80;
+	  msg->_errno = 0;
+	  
+	  msg->_u.open_msg.remote_fd = -1;
+	  msg->_u.open_msg.type = vnode->_u.dev.type;
 	  msg->_u.open_msg.major = vnode->_u.dev.major;
 	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
 	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	  
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
+	else if (vnode->type == VMOUNT) {
+
+	  emscripten_log(EM_LOG_CONSOLE, "vnode is a mount point: %d %d %d",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor);
+
+	  // TODO
+	  
 	}
 	else if (vnode->type == VFILE) {
 
@@ -282,7 +300,11 @@ int main() {
 	}
       }
       
-      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      
+    }
+    else if (msg->msg_id == (OPEN|0x80)) {
+
+      
     }
     
   }

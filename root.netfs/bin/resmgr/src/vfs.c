@@ -144,9 +144,9 @@ struct vnode * vfs_add_dev(struct vnode * parent, const char * name, unsigned ch
   return vn;
 }
 
-int vfs_set_dev(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor) {
+int vfs_set_mount(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor) {
 
-  node->type = VDEV;
+  node->type = VMOUNT;
 
   node->_u.dev.type = type;
   node->_u.dev.major = major;
@@ -202,7 +202,7 @@ struct vnode * vfs_find_node_in_subnodes(struct vnode * vnode, const char * path
 	    return vnode2;
 	  }
 	}
-	else if (vnode->type == VDEV) {
+	else if (vnode->type == VMOUNT) {
 
 	  //emscripten_log(EM_LOG_CONSOLE, "vfs_find_node_in_subnodes: found dev");
 

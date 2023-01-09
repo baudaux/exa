@@ -88,11 +88,19 @@ int device_register_device(unsigned char type, unsigned short major, unsigned sh
     d->next = dev;
   }
 
-  // Add device in /dev
-  struct vnode * vnode = vfs_find_node("/dev");
+  if ( (type == CHR_DEV) || ((type == BLK_DEV)) ) {
+
+    // add device in /dev
+    struct vnode * vnode = vfs_find_node("/dev");
   
-  if (vnode)
-    vfs_add_dev(vnode, name, type, major, minor);
+    if (vnode) {
+      vfs_add_dev(vnode, name, type, major, minor);
+
+      if ( (type == CHR_DEV) && (major == 1) && (!vfs_find_node("/dev/console")) ) {
+	vfs_add_dev(vnode, "console", type, major, minor);
+      }
+    }
+  }
   
   return 0;
 }

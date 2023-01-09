@@ -58,7 +58,9 @@ struct bind_message {
 struct open_message {
   
   int fd;
+  int remote_fd;
   int flags;
+  unsigned char type;
   unsigned short mode;
   unsigned short major;
   unsigned short minor;

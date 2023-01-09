@@ -16,18 +16,47 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#define NB_PROCESS_MAX 64
+#include "vfs.h"
 
-#define NO_PARENT -1
-#define RESMGR_ID 1
+#define NB_PROCESSES_MAX  64
+#define NB_FILES_MAX      64
+
+struct file_desc {
+
+  int fd;
+  int remote_fd;
+  unsigned char type;
+  unsigned short major;
+  unsigned short minor;
+
+  char peer[108];
+};
+
+enum proc_state {
+
+  RUNNING_STATE = 0,
+  SLEEPING_STATE,
+  STOPPED_STATE,
+  ZOMBIE_STATE
+};
 
 struct process {
 
-  pid_t id;
-  pid_t parent_id;
+  char name[16];
+  char cwd[1024];
+  enum proc_state proc_state;
+  pid_t pid;                     // process pid
+  pid_t ppid;                    // parent process id
+  pid_t pgid;                    // process group id
+  pid_t sid;                     // session id
+
+  struct vnode * term;            // controlling terminal
 
   mode_t umask;
+  sigset_t sigprocmask;
+  sigset_t pendingsig;
   
+  struct file_desc fds[NB_FILES_MAX];
 };
 
 void process_init();
@@ -35,5 +64,7 @@ void process_init();
 pid_t create_tty_process();
 pid_t create_netfs_process();
 pid_t create_init_process();
+
+void dump_processes();
 
 #endif // _PROCESS_H
