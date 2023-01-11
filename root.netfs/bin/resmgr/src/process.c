@@ -173,11 +173,12 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
     processes[pid].fds[i].fd = -1;
   }
 
-  if (ppid >= 0) {
+  if (ppid > 0) {
 
     for (int i=0; i < NB_FILES_MAX; ++i) {
 
       if (processes[ppid].fds[i].fd >= 0) {
+	
 	processes[pid].fds[i].fd = processes[ppid].fds[i].fd;
 	processes[pid].fds[i].remote_fd = processes[ppid].fds[i].remote_fd;
 	processes[pid].fds[i].type = processes[ppid].fds[i].type;
@@ -199,6 +200,28 @@ void dump_processes() {
 
   for (int i = 0; i < nb_processes; ++i) {
 
-    emscripten_log(EM_LOG_CONSOLE,"* %d %d %s %d",processes[i].pid, processes[i].ppid, processes[i].name, processes[i].proc_state);
+    emscripten_log(EM_LOG_CONSOLE, "* %d %d %s %d", processes[i].pid, processes[i].ppid, processes[i].name, processes[i].proc_state);
   }
+}
+
+int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned short major, unsigned short minor) {
+  
+  int i;
+  
+  for (i=3; i < NB_FILES_MAX; ++i) {
+
+    if (processes[pid].fds[i].fd == -1)
+      break;
+  }
+
+  if (i >= NB_FILES_MAX)
+    return -1;
+
+  processes[pid].fds[i].fd = i;
+  processes[pid].fds[i].remote_fd = remote_fd;
+  processes[pid].fds[i].type = type;
+  processes[pid].fds[i].major = major;
+  processes[pid].fds[i].minor = minor;
+
+  return i;
 }

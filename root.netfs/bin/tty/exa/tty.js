@@ -3771,33 +3771,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
           throw new FS.ErrnoError(66); // if SOCK_STREAM, must be tcp or 0.
   	}*/
   
-  	if (!Module['fd_table']) {
-  
-  	    Module['fd_table'] = {};
-  	    Module['fd_table'].last_fd = 2;
-  	}
-  
-  	Module['fd_table'].last_fd += 1;
-  
-  	// create our internal socket structure
-  	var sock = {
-  	    fd: Module['fd_table'].last_fd,
-              family: family,
-              type: type,
-              protocol: protocol,
-              server: null,
-              error: null, // Used in getsockopt for SOL_SOCKET/SO_ERROR test
-              peers: {},
-              pending: [],
-              recv_queue: [],
-  	    name: null,
-  	    bc: null,
-              //sock_ops: SOCKFS.websocket_sock_ops
-  	    // TODO: all types of socket
-  	    sock_ops: SOCKFS.unix_dgram_sock_ops
-  	};
-  
-  	Module['fd_table'][Module['fd_table'].last_fd] = sock;
+  	/* Moved to library_syscal.js */
   
   	/*
         // create the filesystem node to store the socket structure
@@ -3891,20 +3865,36 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   		  buf[2] = 0;
   		  buf[3] = 0;*/
   
+  		  let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  		  // pid
+  		  Module.HEAPU8[buf+4] = pid & 0xff;
+  		  Module.HEAPU8[buf+5] = (pid >> 8) & 0xff;
+  		  Module.HEAPU8[buf+6] = (pid >> 16) & 0xff;
+  		  Module.HEAPU8[buf+7] = (pid >> 24) & 0xff;
+  
   		  // errno
   		  Module.HEAPU8[buf+8] = 0x0;
   		  Module.HEAPU8[buf+9] = 0x0;
   		  Module.HEAPU8[buf+10] = 0x0;
   		  Module.HEAPU8[buf+11] = 0x0;
+  
+  		  let fd = sock.fd;
+  
+  		  // fd
+  		  Module.HEAPU8[buf+12] = fd & 0xff;
+  		  Module.HEAPU8[buf+13] = (fd >> 8) & 0xff;
+  		  Module.HEAPU8[buf+14] = (fd >> 16) & 0xff;
+  		  Module.HEAPU8[buf+15] = (fd >> 24) & 0xff;
   		  
   		  // sa_family
-  		  Module.HEAPU8[buf+12] = 0x1; // AF_UNIX
-  		  Module.HEAPU8[buf+13] = 0x0;
+  		  Module.HEAPU8[buf+16] = 0x1; // AF_UNIX
+  		  Module.HEAPU8[buf+17] = 0x0;
   
   		  // sun_path
-  		  stringToUTF8(sock.name,buf+14,108);
+  		  stringToUTF8(sock.name, buf+18, 108);
   
-  		  let buf2 = Module.HEAPU8.slice(buf,buf+256);
+  		  let buf2 = Module.HEAPU8.slice(buf, buf+256);
   
   		  let msg = {
   
@@ -5011,11 +5001,163 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   try {
   
   
-  	var sock = SOCKFS.createSocket(domain, type, protocol);
+  	//var sock = SOCKFS.createSocket(domain, type, protocol);
       //assert(sock.stream.fd < 64); // XXX ? select() assumes socket fd values are in 0..63
   	//return sock.stream.fd;
   
-  	return sock.fd;
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    if (!Module['fd_table']) {
+  
+  		Module['fd_table'] = {};
+  		Module['fd_table'].last_fd = 2;
+  	    }
+  
+  	    if (window.frameElement.getAttribute('pid') != "1") {
+  
+  		let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  
+  		let buf = Module._malloc(256);
+  
+  		Module.HEAPU8[buf] = 9; // SOCKET
+  		
+  		/*//padding
+  		  buf[1] = 0;
+  		  buf[2] = 0;
+  		  buf[3] = 0;*/
+  
+  		let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  		// pid
+  		Module.HEAPU8[buf+4] = pid & 0xff;
+  		Module.HEAPU8[buf+5] = (pid >> 8) & 0xff;
+  		Module.HEAPU8[buf+6] = (pid >> 16) & 0xff;
+  		Module.HEAPU8[buf+7] = (pid >> 24) & 0xff;
+  
+  		// errno
+  		Module.HEAPU8[buf+8] = 0x0;
+  		Module.HEAPU8[buf+9] = 0x0;
+  		Module.HEAPU8[buf+10] = 0x0;
+  		Module.HEAPU8[buf+11] = 0x0;
+  
+  		// fd
+  		Module.HEAPU8[buf+12] = 0x0;
+  		Module.HEAPU8[buf+13] = 0x0;
+  		Module.HEAPU8[buf+14] = 0x0;
+  		Module.HEAPU8[buf+15] = 0x0;
+  		
+  		// domain
+  		Module.HEAPU8[buf+16] = domain & 0xff;
+  		Module.HEAPU8[buf+17] = (domain >> 8) & 0xff;
+  		Module.HEAPU8[buf+18] = (domain >> 16) & 0xff;
+  		Module.HEAPU8[buf+19] = (domain >> 24) & 0xff;
+  
+  		// type
+  		Module.HEAPU8[buf+20] = type & 0xff;
+  		Module.HEAPU8[buf+21] = (type >> 8) & 0xff;
+  		Module.HEAPU8[buf+22] = (type >> 16) & 0xff;
+  		Module.HEAPU8[buf+23] = (type >> 24) & 0xff;
+  
+  		// protocol
+  		Module.HEAPU8[buf+24] = protocol & 0xff;
+  		Module.HEAPU8[buf+25] = (protocol >> 8) & 0xff;
+  		Module.HEAPU8[buf+26] = (protocol >> 16) & 0xff;
+  		Module.HEAPU8[buf+27] = (protocol >> 24) & 0xff;
+  		
+  		let buf2 = Module.HEAPU8.slice(buf,buf+256);
+  
+  		let socket_name = "socket."+window.frameElement.getAttribute('pid');
+  		let socket_bc = new BroadcastChannel(socket_name);
+  
+  		socket_bc.onmessage = (messageEvent) => {
+  
+  		    console.log(messageEvent);
+  
+  		    let msg2 = messageEvent.data;
+  
+  		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
+  
+  		    console.log(msg2.buf[0]);
+  
+  		    if (msg2.buf[0] == (9|0x80)) {
+  
+  			console.log("Return of socket: errno = "+_errno);
+  
+  			if (_errno == 0) {
+  
+  			    let fd = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  			    console.log("fd = "+fd);
+  
+  			    // create our internal socket structure
+  			    var sock = {
+  				fd: fd,
+  				family: domain,
+  				type: type,
+  				protocol: protocol,
+  				server: null,
+  				error: null, // Used in getsockopt for SOL_SOCKET/SO_ERROR test
+  				peers: {},
+  				pending: [],
+  				recv_queue: [],
+  				name: null,
+  				bc: null,
+  				//sock_ops: SOCKFS.websocket_sock_ops
+  				// TODO: all types of socket
+  				sock_ops: SOCKFS.unix_dgram_sock_ops
+  			    };
+  
+  			    Module['fd_table'][fd] = sock;
+  
+  			    wakeUp(fd);
+  			}
+  			else {
+  
+  			    wakeUp(-1);
+  			}
+  		    }
+  		};
+  
+  		let msg = {
+  
+  		    from: socket_name,
+  		    buf: buf2,
+  		    len: 256
+  		};
+  		
+  		bc.postMessage(msg);
+  
+  		Module._free(buf);
+  	    }
+  	    else {
+  
+  		Module['fd_table'].last_fd += 1;
+  
+  		// create our internal socket structure
+  		var sock = {
+  		    fd: Module['fd_table'].last_fd,
+  		    family: domain,
+  		    type: type,
+  		    protocol: protocol,
+  		    server: null,
+  		    error: null, // Used in getsockopt for SOL_SOCKET/SO_ERROR test
+  		    peers: {},
+  		    pending: [],
+  		    recv_queue: [],
+  		    name: null,
+  		    bc: null,
+  		    //sock_ops: SOCKFS.websocket_sock_ops
+  		    // TODO: all types of socket
+  		    sock_ops: SOCKFS.unix_dgram_sock_ops
+  		};
+  
+  		Module['fd_table'][Module['fd_table'].last_fd] = sock;
+  
+  		wakeUp(Module['fd_table'].last_fd);
+  	    }
+  	});
+  
+  	return ret;
     } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
@@ -5798,7 +5940,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];

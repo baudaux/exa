@@ -27,6 +27,7 @@ enum message_id {
   MOUNT,
   UMOUNT,
   
+  SOCKET = 9,
   BIND = 10,
   OPEN,
   READ,
@@ -50,8 +51,17 @@ struct device_message {
   unsigned short minor;
 };
 
+struct socket_message {
+
+  int fd;
+  int domain;
+  int type;
+  int protocol;
+};
+
 struct bind_message {
-  
+
+  int fd;
   struct sockaddr addr;
 };
 
@@ -60,8 +70,8 @@ struct open_message {
   int fd;
   int remote_fd;
   int flags;
-  unsigned char type;
   unsigned short mode;
+  unsigned char type;
   unsigned short major;
   unsigned short minor;
   unsigned char peer[108];
@@ -94,6 +104,7 @@ struct message {
   union {
 
     struct device_message dev_msg;
+    struct socket_message socket_msg;
     struct bind_message bind_msg;
     struct open_message open_msg;
     struct io_message io_msg;

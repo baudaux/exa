@@ -217,6 +217,19 @@ int main() {
 	}
       }
     }
+    else if (msg->msg_id == SOCKET) {
+
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      emscripten_log(EM_LOG_CONSOLE, "SOCKET %d %d %d %d", msg->pid, msg->_u.socket_msg.domain, msg->_u.socket_msg.type, msg->_u.socket_msg.protocol);
+
+      msg->_u.socket_msg.fd = process_create_fd(msg->pid, -2, (unsigned char)msg->_u.socket_msg.type, (unsigned short)msg->_u.socket_msg.domain, (unsigned short)msg->_u.socket_msg.protocol);
+
+      emscripten_log(EM_LOG_CONSOLE, "SOCKET created %d", msg->_u.socket_msg.fd);
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+    }
     else if (msg->msg_id == BIND) {
 
       msg->msg_id |= 0x80;
@@ -252,7 +265,7 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      emscripten_log(EM_LOG_CONSOLE, "OPEN %x %x %s", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
+      emscripten_log(EM_LOG_CONSOLE, "OPEN from %d: %x %x %s", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
       struct vnode * vnode = vfs_find_node((const char *)msg->_u.open_msg.pathname);
       if (vnode) {
@@ -261,18 +274,22 @@ int main() {
 
 	if (vnode->type == VDEV) {
 
-	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor);
+	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
-	  msg->msg_id |= 0x80;
-	  msg->_errno = 0;
+	  // Forward msg to driver
 	  
-	  msg->_u.open_msg.remote_fd = -1;
 	  msg->_u.open_msg.type = vnode->_u.dev.type;
 	  msg->_u.open_msg.major = vnode->_u.dev.major;
 	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
 	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+
+	  struct sockaddr_un driver_addr;
+
+	  driver_addr.sun_family = AF_UNIX;
+	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
 	  
-	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 	}
 	else if (vnode->type == VMOUNT) {
 
@@ -298,12 +315,32 @@ int main() {
 
 	  // TODO
 	}
+	else {
+
+	  msg->msg_id |= 0x80;
+	  msg->_errno = ENOENT;
+
+	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
       }
-      
-      
     }
     else if (msg->msg_id == (OPEN|0x80)) {
 
+      emscripten_log(EM_LOG_CONSOLE, "Response from OPEN from %d: %x %x %s %d %d", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname,msg->pid, msg->_u.open_msg.remote_fd);
+
+      if (msg->_errno == 0) {
+
+	msg->_u.open_msg.fd = process_create_fd(msg->pid, msg->_u.open_msg.remote_fd, msg->_u.open_msg.type, msg->_u.open_msg.major, msg->_u.open_msg.minor);
+      }
+
+      // Forward response to process
+
+      struct sockaddr_un process_addr;
+
+      process_addr.sun_family = AF_UNIX;
+      sprintf(process_addr.sun_path, "open.%d", msg->pid);
+
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &process_addr, sizeof(process_addr));
       
     }
     

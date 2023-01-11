@@ -24,10 +24,10 @@
 struct file_desc {
 
   int fd;
-  int remote_fd;
-  unsigned char type;
-  unsigned short major;
-  unsigned short minor;
+  int remote_fd;            // -2 for socket
+  unsigned char type;       // type for socket
+  unsigned short major;     // domain for socket
+  unsigned short minor;     // protocoal for socket
 
   char peer[108];
 };
@@ -64,6 +64,8 @@ void process_init();
 pid_t create_tty_process();
 pid_t create_netfs_process();
 pid_t create_init_process();
+
+int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned short major, unsigned short minor);
 
 void dump_processes();
 
