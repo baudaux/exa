@@ -173,7 +173,11 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
     processes[pid].fds[i].fd = -1;
   }
 
+  processes[pid].last_fd = 2;
+
   if (ppid > 0) {
+
+    processes[pid].last_fd = processes[ppid].last_fd;
 
     for (int i=0; i < NB_FILES_MAX; ++i) {
 
@@ -208,7 +212,7 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   
   int i;
   
-  for (i=3; i < NB_FILES_MAX; ++i) {
+  for (i=0; i < NB_FILES_MAX; ++i) {
 
     if (processes[pid].fds[i].fd == -1)
       break;
@@ -217,11 +221,13 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   if (i >= NB_FILES_MAX)
     return -1;
 
-  processes[pid].fds[i].fd = i;
+  processes[pid].last_fd++;
+
+  processes[pid].fds[i].fd = processes[pid].last_fd;
   processes[pid].fds[i].remote_fd = remote_fd;
   processes[pid].fds[i].type = type;
   processes[pid].fds[i].major = major;
   processes[pid].fds[i].minor = minor;
 
-  return i;
+  return processes[pid].last_fd;
 }

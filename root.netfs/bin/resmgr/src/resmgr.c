@@ -343,7 +343,17 @@ int main() {
       sendto(sock, buf, 1256, 0, (struct sockaddr *) &process_addr, sizeof(process_addr));
       
     }
-    
+    else if (msg->msg_id == CLOSE) {
+
+      emscripten_log(EM_LOG_CONSOLE, "CLOSE from %d: %d", msg->pid, msg->_u.close_msg.fd);
+
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      // TODO
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+    }
   }
   
   return 0;

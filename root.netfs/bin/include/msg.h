@@ -78,6 +78,11 @@ struct open_message {
   unsigned char pathname[1024];
 };
 
+struct close_message {
+
+  int fd;
+};
+
 struct io_message {
   
   int fd;
@@ -107,6 +112,7 @@ struct message {
     struct socket_message socket_msg;
     struct bind_message bind_msg;
     struct open_message open_msg;
+    struct close_message close_msg;
     struct io_message io_msg;
     struct mount_message mount_msg;
   } _u;

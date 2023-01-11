@@ -50,11 +50,13 @@ struct process {
   pid_t pgid;                    // process group id
   pid_t sid;                     // session id
 
-  struct vnode * term;            // controlling terminal
+  struct vnode * term;           // controlling terminal
 
   mode_t umask;
   sigset_t sigprocmask;
   sigset_t pendingsig;
+
+  int last_fd;                   // starts at 3, always incremented
   
   struct file_desc fds[NB_FILES_MAX];
 };
