@@ -4976,8 +4976,13 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		stringToUTF8(UTF8ToString(path), buf+140, 1024);
   
   		let buf2 = Module.HEAPU8.slice(buf, buf+1256);
+  
+  		if (!Module['last_bc'])
+  		    Module['last_bc'] = 1;
+  		else
+  		    Module['last_bc'] += 1;
   		
-  		let open_name = "open."+window.frameElement.getAttribute('pid');
+  		let open_name = "open."+window.frameElement.getAttribute('pid')+"."+Module['last_bc'];
   
   		let open_bc = new BroadcastChannel(open_name);
   
@@ -4987,6 +4992,8 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   		    //console.log("open_bc.onmessage");
   		    //console.log(messageEvent);
+  
+  		    open_bc = null;
   
   		    let msg2 = messageEvent.data;
   
@@ -5050,7 +5057,7 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   				Module['fd_table'][fd] = desc;
   
-  				console.log(Module['fd_table']);
+  				//console.log(Module['fd_table']);
   
   				wakeUp(fd);
   			    }
@@ -5240,10 +5247,17 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		
   		let buf2 = Module.HEAPU8.slice(buf,buf+256);
   
-  		let socket_name = "socket."+window.frameElement.getAttribute('pid');
+  		if (!Module['last_bc'])
+  		    Module['last_bc'] = 1;
+  		else
+  		    Module['last_bc'] += 1;
+  
+  		let socket_name = "socket."+window.frameElement.getAttribute('pid')+"."+Module['fd_table'].last_bc;
   		let socket_bc = new BroadcastChannel(socket_name);
   
   		socket_bc.onmessage = (messageEvent) => {
+  
+  		    socket_bc.close();
   
   		    let msg2 = messageEvent.data;
   
@@ -5386,12 +5400,19 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   	    buf2.set(HEAPU8.slice(buf,buf+len),20);
   
-  	    let write_name = "write."+window.frameElement.getAttribute('pid');
+  	    if (!Module['last_bc'])
+  		Module['last_bc'] = 1;
+  	    else
+  		Module['last_bc'] += 1;
+  
+  	    let write_name = "write."+window.frameElement.getAttribute('pid')+"."+Module['last_bc'];
   
   	    let write_bc = new BroadcastChannel(write_name);
   
   	    write_bc.onmessage = (messageEvent) => {
   
+  		write_bc.close();
+  		
   		wakeUp(0); // TODO: size
   	    };
   

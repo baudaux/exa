@@ -4968,7 +4968,7 @@ var ASM_CONSTS = {
   			}
   			else if (messageEvent.data == "end_fork") {
   
-  			    Module[_ch] = null;
+  			    Module[_ch].close();
   
   			    wakeUp(_pid);
   			}
@@ -5157,10 +5157,17 @@ var ASM_CONSTS = {
   		
   		let buf2 = Module.HEAPU8.slice(buf,buf+256);
   
-  		let socket_name = "socket."+window.frameElement.getAttribute('pid');
+  		if (!Module['last_bc'])
+  		    Module['last_bc'] = 1;
+  		else
+  		    Module['last_bc'] += 1;
+  
+  		let socket_name = "socket."+window.frameElement.getAttribute('pid')+"."+Module['fd_table'].last_bc;
   		let socket_bc = new BroadcastChannel(socket_name);
   
   		socket_bc.onmessage = (messageEvent) => {
+  
+  		    socket_bc.close();
   
   		    let msg2 = messageEvent.data;
   
@@ -6474,10 +6481,10 @@ var asm = createWasm();
 var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
 
 /** @type {function(...*):?} */
-var _main = Module["_main"] = createExportWrapper("main");
+var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
-var _malloc = Module["_malloc"] = createExportWrapper("malloc");
+var _main = Module["_main"] = createExportWrapper("main");
 
 /** @type {function(...*):?} */
 var _free = Module["_free"] = createExportWrapper("free");

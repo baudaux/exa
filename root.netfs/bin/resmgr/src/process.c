@@ -168,7 +168,7 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
   sigemptyset(&processes[pid].pendingsig);
     
-  for (int i=0; i < NB_FILES_MAX; ++i) {
+  for (int i = 0; i < NB_FILES_MAX; ++i) {
 
     processes[pid].fds[i].fd = -1;
   }
@@ -179,7 +179,7 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
     processes[pid].last_fd = processes[ppid].last_fd;
 
-    for (int i=0; i < NB_FILES_MAX; ++i) {
+    for (int i = 0; i < NB_FILES_MAX; ++i) {
 
       if (processes[ppid].fds[i].fd >= 0) {
 	
@@ -212,7 +212,7 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   
   int i;
   
-  for (i=0; i < NB_FILES_MAX; ++i) {
+  for (i = 0; i < NB_FILES_MAX; ++i) {
 
     if (processes[pid].fds[i].fd == -1)
       break;
@@ -230,4 +230,55 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   processes[pid].fds[i].minor = minor;
 
   return processes[pid].last_fd;
+}
+
+int process_get_fd(pid_t pid, int fd, unsigned char * type, unsigned short * major, int * remote_fd) {
+
+  for (int i = 0; i < NB_FILES_MAX; ++i) {
+
+    if (processes[pid].fds[i].fd == fd) {
+      *type = processes[pid].fds[i].type;
+      *major = processes[pid].fds[i].major;
+      *remote_fd = processes[pid].fds[i].minor;
+
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+int process_close_fd(pid_t pid, int fd) {
+
+  for (int i = 0; i < NB_FILES_MAX; ++i) {
+
+    if (processes[pid].fds[i].fd == fd) {
+
+      processes[pid].fds[i].fd = -1;
+      
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd) {
+
+  for (int j = 0; j < nb_processes; ++j) {
+
+    for (int i = 0; i < NB_FILES_MAX; ++i) {
+
+      if (processes[j].fds[i].fd != -1) {
+
+	if ( (processes[j].fds[i].type == type) && (processes[j].fds[i].major == major) && (processes[j].fds[i].remote_fd == remote_fd) ) {
+
+	  return 1;
+	  
+	}
+      }
+    }
+  }
+
+  return 0;
 }

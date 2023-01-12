@@ -251,7 +251,7 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN %d %d",msg->_u.open_msg.minor,msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d, %d", msg->pid, msg->_u.open_msg.minor);
 
       int fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
@@ -283,9 +283,18 @@ int main() {
 
       
     }
-  }
+    else if (msg->msg_id == CLOSE) {
 
-  
+      emscripten_log(EM_LOG_CONSOLE, "tty: CLOSE from %d, %d", msg->pid, msg->_u.close_msg.fd);
+
+      // very temporary
+      clients[msg->_u.close_msg.fd].pid = -1;
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
+      
+    }
+  }
   
   return 0;
 }

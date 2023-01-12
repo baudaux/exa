@@ -1173,7 +1173,7 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  2237: ($0) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0); Module["term_channel"].port1.postMessage(msg); }
+  2269: ($0) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0); Module["term_channel"].port1.postMessage(msg); }
 };
 function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]\n\r"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
 
@@ -5066,10 +5066,17 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   		
   		let buf2 = Module.HEAPU8.slice(buf,buf+256);
   
-  		let socket_name = "socket."+window.frameElement.getAttribute('pid');
+  		if (!Module['last_bc'])
+  		    Module['last_bc'] = 1;
+  		else
+  		    Module['last_bc'] += 1;
+  
+  		let socket_name = "socket."+window.frameElement.getAttribute('pid')+"."+Module['fd_table'].last_bc;
   		let socket_bc = new BroadcastChannel(socket_name);
   
   		socket_bc.onmessage = (messageEvent) => {
+  
+  		    socket_bc.close();
   
   		    let msg2 = messageEvent.data;
   
@@ -6427,8 +6434,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1756;
-var ___stop_em_js = Module['___stop_em_js'] = 2237;
+var ___start_em_js = Module['___start_em_js'] = 1788;
+var ___stop_em_js = Module['___stop_em_js'] = 2269;
 
 
 

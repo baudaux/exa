@@ -13,6 +13,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <stdlib.h>
 
 #include <fcntl.h>
 #include <errno.h>
@@ -20,6 +21,7 @@
 #include "vfs.h"
 #include "process.h"
 #include "device.h"
+#include "unordered_map.h"
 
 #include "msg.h"
 
@@ -58,6 +60,7 @@ int main() {
   int bytes_rec;
   socklen_t len;
   char buf[1256];
+  struct unordered_map * process_peer_map;
 
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE, "Starting resmgr v0.1.0 ...");
@@ -65,6 +68,8 @@ int main() {
   vfs_init();
   process_init();
   device_init();
+
+  process_peer_map = new_unordered_map(-1, NULL);
 
   /* Create the server local socket */
   sock = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -277,6 +282,12 @@ int main() {
 	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
 	  // Forward msg to driver
+
+	  void * item = malloc(sizeof(struct sockaddr_un));
+
+	  memcpy(item, &remote_addr, sizeof(remote_addr));
+	  
+	  add_item_to_unordered_map(process_peer_map, msg->pid, item);
 	  
 	  msg->_u.open_msg.type = vnode->_u.dev.type;
 	  msg->_u.open_msg.major = vnode->_u.dev.major;
@@ -311,11 +322,11 @@ int main() {
 
 	emscripten_log(EM_LOG_CONSOLE, "vnode not found");
 
-	if (msg->_u.open_msg.flags & O_CREAT) {
+	/*if (msg->_u.open_msg.flags & O_CREAT) {
 
 	  // TODO
 	}
-	else {
+	else*/ {
 
 	  msg->msg_id |= 0x80;
 	  msg->_errno = ENOENT;
@@ -335,24 +346,85 @@ int main() {
 
       // Forward response to process
 
-      struct sockaddr_un process_addr;
+      struct unordered_map * item = get_item_from_unordered_map(process_peer_map, msg->pid);
 
-      process_addr.sun_family = AF_UNIX;
-      sprintf(process_addr.sun_path, "open.%d", msg->pid);
+      if (item) {
 
-      sendto(sock, buf, 1256, 0, (struct sockaddr *) &process_addr, sizeof(process_addr));
+	sendto(sock, buf, 1256, 0, (struct sockaddr *)item->data, sizeof(struct sockaddr_un));
+
+	remove_item_from_unordered_map(process_peer_map, item);
+      }
       
     }
     else if (msg->msg_id == CLOSE) {
 
       emscripten_log(EM_LOG_CONSOLE, "CLOSE from %d: %d", msg->pid, msg->_u.close_msg.fd);
 
-      msg->msg_id |= 0x80;
-      msg->_errno = 0;
+      unsigned char type;
+      unsigned short major;
+      int remote_fd;
 
-      // TODO
+      // Get the fd of the process
+      if (process_get_fd(msg->pid, msg->_u.close_msg.fd, &type, &major, &remote_fd) >= 0) {
 
-      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	// Close the fd for this process
+	process_close_fd(msg->pid, msg->_u.close_msg.fd);
+
+	// Find fd in other processes
+	if (process_find_open_fd(type, major, remote_fd) < 0) {
+
+	  // No more fd, close the fd in the driver
+
+	  // Forward msg to driver
+
+	  void * item = malloc(sizeof(struct sockaddr_un));
+
+	  memcpy(item, &remote_addr, sizeof(remote_addr));
+	  
+	  add_item_to_unordered_map(process_peer_map, msg->pid, item);
+
+	  msg->_u.close_msg.fd = remote_fd;
+
+	  struct sockaddr_un driver_addr;
+
+	  driver_addr.sun_family = AF_UNIX;
+	  strcpy(driver_addr.sun_path, device_get_driver(type, major)->peer);
+
+	  sendto(sock, buf, 256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+	}
+	else {
+
+	  // Other fd are there, do not close fd in the driver
+
+	  msg->msg_id |= 0x80;
+	  msg->_errno = 0;
+
+	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
+      }
+      else {
+
+	msg->msg_id |= 0x80;
+	msg->_errno = EBADF;
+
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      }
+    }
+    else if (msg->msg_id == (CLOSE|0x80)) {
+
+      emscripten_log(EM_LOG_CONSOLE, "Response from CLOSE from %d", msg->pid);
+
+      // Forward response to process
+
+      struct unordered_map * item = get_item_from_unordered_map(process_peer_map, msg->pid);
+
+      if (item) {
+
+	sendto(sock, buf, 256, 0, (struct sockaddr *)item->data, sizeof(struct sockaddr_un));
+
+	remove_item_from_unordered_map(process_peer_map, item);
+      }
+      
     }
   }
   
