@@ -173,6 +173,9 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
     processes[pid].fds[i].fd = -1;
   }
 
+  processes[pid].peer_addr.sun_family = AF_UNIX;
+  sprintf(processes[pid].peer_addr.sun_path, "channel.process.%d", pid);
+
   processes[pid].last_fd = 2;
 
   if (ppid > 0) {
@@ -282,3 +285,34 @@ int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd
 
   return 0;
 }
+
+struct sockaddr_un * process_get_peer_addr(pid_t pid) {
+
+  return &processes[pid].peer_addr;
+}
+
+pid_t process_group_exists(pid_t pgid) {
+
+  for (int i = 0; i < nb_processes; ++i) {
+
+    if (processes[i].pgid == pgid)
+      return i;
+  }
+
+  return 0;
+}
+
+pid_t process_setsid(pid_t pid) {
+
+  if (!process_group_exists(pid)) { // process is not process group leader
+
+    processes[pid].pgid = pid;
+    processes[pid].sid = pid;
+    processes[pid].term = NULL;
+    
+    return pid;
+  }
+
+  return -1;
+}
+

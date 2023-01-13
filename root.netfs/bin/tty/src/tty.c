@@ -263,9 +263,12 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
+      emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d", msg->pid);
       
     }
     else if (msg->msg_id == WRITE) {
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: WRITE from %d", msg->pid);
 
       if (msg->_u.io_msg.fd == -1) {
 
@@ -281,7 +284,10 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      
+      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d", msg->pid);
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == CLOSE) {
 

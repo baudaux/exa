@@ -3763,6 +3763,42 @@ var ASM_CONSTS = {
   
         // If debug is enabled register simple default logging callbacks for each Event.
   
+  	/* Modified by Benoit Baudaux 13/1/2023 */
+  
+  	Module['fd_table'] = {};
+  	Module['fd_table'].last_fd = 2;
+  
+  	Module['bc_channels'] = {};
+  	Module['get_broadcast_channel'] = (name) => {
+  
+  	    if (name in Module['bc_channels']) {
+  		return Module['bc_channels'][name];
+  	    }
+  	    else {
+  
+  		Module['bc_channels'][name] = new BroadcastChannel(name);
+  		return Module['bc_channels'][name];
+  	    }
+  	};
+  
+  	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+  
+  	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+  
+  	    if (Module['rcv_bc_channel'].handler) {
+  
+  		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+  		    return;
+  	    }
+  	};
+  
+  	Module['rcv_bc_channel'].set_handler = (handler) => {
+  
+  	    Module['rcv_bc_channel'].handler = handler;
+  	};
+  
+  	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+  
         return FS.createNode(null, '/', 16384 | 511 /* 0777 */, 0);
       },createSocket:function(family, type, protocol) {
         /*type &= ~526336; // Some applications may pass it; it makes no sense for a single process.
@@ -5098,15 +5134,9 @@ var ASM_CONSTS = {
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
-  	    if (!Module['fd_table']) {
-  
-  		Module['fd_table'] = {};
-  		Module['fd_table'].last_fd = 2;
-  	    }
-  
   	    if (window.frameElement.getAttribute('pid') != "1") {
   
-  		let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
   
   		let buf = Module._malloc(256);
   
@@ -5157,23 +5187,15 @@ var ASM_CONSTS = {
   		
   		let buf2 = Module.HEAPU8.slice(buf,buf+256);
   
-  		if (!Module['last_bc'])
-  		    Module['last_bc'] = 1;
-  		else
-  		    Module['last_bc'] += 1;
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
-  		let socket_name = "socket."+window.frameElement.getAttribute('pid')+"."+Module['fd_table'].last_bc;
-  		let socket_bc = new BroadcastChannel(socket_name);
-  
-  		socket_bc.onmessage = (messageEvent) => {
-  
-  		    socket_bc.close();
+  		    Module['rcv_bc_channel'].set_handler(null);
   
   		    let msg2 = messageEvent.data;
   
-  		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
-  
   		    if (msg2.buf[0] == (9|0x80)) {
+  
+  			let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
   
   			if (_errno == 0) {
   
@@ -5205,21 +5227,31 @@ var ASM_CONSTS = {
   
   			    wakeUp(-1);
   			}
+  
+  			return 0;
   		    }
-  		};
+  
+  		    return -1;
+  		});
   
   		let msg = {
   
-  		    from: socket_name,
+  		    from: Module['rcv_bc_channel'].name,
   		    buf: buf2,
   		    len: 256
   		};
-  		
+  
   		bc.postMessage(msg);
   
   		Module._free(buf);
   	    }
   	    else {
+  
+  		if (!Module['fd_table']) {
+  
+  		    Module['fd_table'] = {};
+  		    Module['fd_table'].last_fd = 0;
+  		}
   
   		Module['fd_table'].last_fd += 1;
   
@@ -6065,7 +6097,7 @@ var ASM_CONSTS = {
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6481,10 +6513,10 @@ var asm = createWasm();
 var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
 
 /** @type {function(...*):?} */
-var _malloc = Module["_malloc"] = createExportWrapper("malloc");
+var _main = Module["_main"] = createExportWrapper("main");
 
 /** @type {function(...*):?} */
-var _main = Module["_main"] = createExportWrapper("main");
+var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
 var _free = Module["_free"] = createExportWrapper("free");
@@ -7036,6 +7068,8 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
+
+	
     }
 					
     

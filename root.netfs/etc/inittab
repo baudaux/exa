@@ -1,0 +1,4 @@
+# inittab pour linux
+id:1:initdefault:
+rc::bootwait:/etc/rc
+1:1:respawn:/etc/getty 9600 tty1

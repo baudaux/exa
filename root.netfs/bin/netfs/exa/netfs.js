@@ -3763,6 +3763,42 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
         // If debug is enabled register simple default logging callbacks for each Event.
   
+  	/* Modified by Benoit Baudaux 13/1/2023 */
+  
+  	Module['fd_table'] = {};
+  	Module['fd_table'].last_fd = 2;
+  
+  	Module['bc_channels'] = {};
+  	Module['get_broadcast_channel'] = (name) => {
+  
+  	    if (name in Module['bc_channels']) {
+  		return Module['bc_channels'][name];
+  	    }
+  	    else {
+  
+  		Module['bc_channels'][name] = new BroadcastChannel(name);
+  		return Module['bc_channels'][name];
+  	    }
+  	};
+  
+  	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+  
+  	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+  
+  	    if (Module['rcv_bc_channel'].handler) {
+  
+  		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+  		    return;
+  	    }
+  	};
+  
+  	Module['rcv_bc_channel'].set_handler = (handler) => {
+  
+  	    Module['rcv_bc_channel'].handler = handler;
+  	};
+  
+  	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+  
         return FS.createNode(null, '/', 16384 | 511 /* 0777 */, 0);
       },createSocket:function(family, type, protocol) {
         /*type &= ~526336; // Some applications may pass it; it makes no sense for a single process.
@@ -4926,8 +4962,8 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   		var mode = varargs ? SYSCALLS.get() : 0;
   
-  		let bc = new BroadcastChannel("/tmp2/resmgr.peer");
-  
+  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
+  		
   		let buf = Module._malloc(1256);
   
   		Module.HEAPU8[buf] = 11; // OPEN
@@ -4958,6 +4994,7 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		Module.HEAPU8[buf+15] = 0x0;
   
   		// remote fd
+  
   		Module.HEAPU8[buf+16] = 0x0;
   		Module.HEAPU8[buf+17] = 0x0;
   		Module.HEAPU8[buf+18] = 0x0;
@@ -4976,29 +5013,15 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		stringToUTF8(UTF8ToString(path), buf+140, 1024);
   
   		let buf2 = Module.HEAPU8.slice(buf, buf+1256);
-  
-  		if (!Module['last_bc'])
-  		    Module['last_bc'] = 1;
-  		else
-  		    Module['last_bc'] += 1;
   		
-  		let open_name = "open."+window.frameElement.getAttribute('pid')+"."+Module['last_bc'];
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
-  		let open_bc = new BroadcastChannel(open_name);
-  
-  		//first_response = true;
-  
-  		open_bc.onmessage = (messageEvent) => {
-  
-  		    //console.log("open_bc.onmessage");
-  		    //console.log(messageEvent);
-  
-  		    open_bc = null;
+  		    Module['rcv_bc_channel'].set_handler(null);
+  		    
+  		    console.log(messageEvent);
   
   		    let msg2 = messageEvent.data;
-  
-  		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
-  
+  		    
   		    /*if (first_response) { // first response comes from resmgr
   
   			first_response = false;
@@ -5017,7 +5040,9 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		    }
   		    else {*/
   
-  			if (msg2.buf[0] == (11|0x80)) {
+  		    if (msg2.buf[0] == (11|0x80)) {
+  
+  			let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
   
   			    if (_errno == 0) {
   
@@ -5030,10 +5055,7 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   				let minor = msg2.buf[30] | (msg2.buf[31] << 8);
   				let peer = UTF8ArrayToString(msg2.buf, 32, 108);
   
-  				if (!Module['fd_table']) {
-  
-  				    Module['fd_table'] = {};
-  				}
+  				
   
   				// create our internal socket structure
   				var desc = {
@@ -5065,12 +5087,16 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   				wakeUp(-1);
   			    }
-  			}
-  		};
+  
+  			return 0;
+  		    }
+  
+  		    return -1;
+  		});
   
   		let msg = {
   
-  		    from: open_name,
+  		    from: Module['rcv_bc_channel'].name,
   		    buf: buf2,
   		    len: 1256
   		};
@@ -5188,15 +5214,9 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
-  	    if (!Module['fd_table']) {
-  
-  		Module['fd_table'] = {};
-  		Module['fd_table'].last_fd = 2;
-  	    }
-  
   	    if (window.frameElement.getAttribute('pid') != "1") {
   
-  		let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
   
   		let buf = Module._malloc(256);
   
@@ -5247,23 +5267,15 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   		
   		let buf2 = Module.HEAPU8.slice(buf,buf+256);
   
-  		if (!Module['last_bc'])
-  		    Module['last_bc'] = 1;
-  		else
-  		    Module['last_bc'] += 1;
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
-  		let socket_name = "socket."+window.frameElement.getAttribute('pid')+"."+Module['fd_table'].last_bc;
-  		let socket_bc = new BroadcastChannel(socket_name);
-  
-  		socket_bc.onmessage = (messageEvent) => {
-  
-  		    socket_bc.close();
+  		    Module['rcv_bc_channel'].set_handler(null);
   
   		    let msg2 = messageEvent.data;
   
-  		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
-  
   		    if (msg2.buf[0] == (9|0x80)) {
+  
+  			let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
   
   			if (_errno == 0) {
   
@@ -5295,21 +5307,31 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   			    wakeUp(-1);
   			}
+  
+  			return 0;
   		    }
-  		};
+  
+  		    return -1;
+  		});
   
   		let msg = {
   
-  		    from: socket_name,
+  		    from: Module['rcv_bc_channel'].name,
   		    buf: buf2,
   		    len: 256
   		};
-  		
+  
   		bc.postMessage(msg);
   
   		Module._free(buf);
   	    }
   	    else {
+  
+  		if (!Module['fd_table']) {
+  
+  		    Module['fd_table'] = {};
+  		    Module['fd_table'].last_fd = 0;
+  		}
   
   		Module['fd_table'].last_fd += 1;
   
@@ -5400,33 +5422,34 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   
   	    buf2.set(HEAPU8.slice(buf,buf+len),20);
   
-  	    if (!Module['last_bc'])
-  		Module['last_bc'] = 1;
-  	    else
-  		Module['last_bc'] += 1;
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
-  	    let write_name = "write."+window.frameElement.getAttribute('pid')+"."+Module['last_bc'];
+  		Module['rcv_bc_channel'].set_handler(null);
   
-  	    let write_bc = new BroadcastChannel(write_name);
+  		let msg2 = messageEvent.data;
   
-  	    write_bc.onmessage = (messageEvent) => {
-  
-  		write_bc.close();
+  		if (msg2.buf[0] == (13|0x80)) {
   		
-  		wakeUp(0); // TODO: size
-  	    };
+  		    wakeUp(0); // TODO: size
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
   
   	    let msg = {
   
-  		from: write_name,
+  		from: Module['rcv_bc_channel'].name,
   		buf: buf2,
   		len: buf_size
   	    };
   
-  	    //let write_driver_bc = new BroadcastChannel(Module['fd_table'][fd].peer);
-  	    let write_driver_bc = new BroadcastChannel("/tmp2/tty.peer");
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
   	    
-  	    write_driver_bc.postMessage(msg);
+  	    driver_bc.postMessage(msg);
   	});
       
       return ret;
@@ -6180,7 +6203,7 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6676,8 +6699,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1772;
-var ___stop_em_js = Module['___stop_em_js'] = 2085;
+var ___start_em_js = Module['___start_em_js'] = 1788;
+var ___stop_em_js = Module['___stop_em_js'] = 2101;
 
 
 
@@ -7160,6 +7183,8 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
+
+	
     }
 					
     

@@ -33,7 +33,8 @@ enum message_id {
   READ,
   WRITE,
   IOCTL,
-  CLOSE,
+  CLOSE = 15,
+  SETSID,
 };
 
 enum dev_type {
@@ -98,6 +99,11 @@ struct mount_message {
   char pathname[1024];
 };
 
+struct setsid_message {
+
+  pid_t sid;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -115,6 +121,8 @@ struct message {
     struct close_message close_msg;
     struct io_message io_msg;
     struct mount_message mount_msg;
+    struct setsid_message setsid_msg;
+    
   } _u;
 };
 

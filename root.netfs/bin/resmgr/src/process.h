@@ -15,6 +15,8 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include "vfs.h"
 
@@ -56,6 +58,8 @@ struct process {
   sigset_t sigprocmask;
   sigset_t pendingsig;
 
+  struct sockaddr_un peer_addr;
+
   int last_fd;                   // starts at 3, always incremented
   
   struct file_desc fds[NB_FILES_MAX];
@@ -71,6 +75,10 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
 int process_get_fd(pid_t pid, int fd, unsigned char * type, unsigned short * major, int * remote_fd);
 int process_close_fd(pid_t pid, int fd);
 int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd);
+
+struct sockaddr_un * process_get_peer_addr(pid_t pid);
+
+pid_t process_setsid(pid_t pid);
 
 void dump_processes();
 

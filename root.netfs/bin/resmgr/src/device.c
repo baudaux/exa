@@ -40,6 +40,9 @@ void device_init() {
   // Add /bin for netfs
   vfs_add_dir(vnode,"bin");
 
+  // Add /etc for netfs
+  vfs_add_dir(vnode,"etc");
+
   // Add /tmp2 for early storage (socket path for example)
   vfs_add_dir(vnode,"tmp2");
 }

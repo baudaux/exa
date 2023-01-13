@@ -60,7 +60,6 @@ int main() {
   int bytes_rec;
   socklen_t len;
   char buf[1256];
-  struct unordered_map * process_peer_map;
 
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE, "Starting resmgr v0.1.0 ...");
@@ -68,8 +67,6 @@ int main() {
   vfs_init();
   process_init();
   device_init();
-
-  process_peer_map = new_unordered_map(-1, NULL);
 
   /* Create the server local socket */
   sock = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -97,7 +94,7 @@ int main() {
 
     struct message * msg = (struct message *)&buf[0];
 
-    emscripten_log(EM_LOG_CONSOLE, "resmgr: msg %d received from %s (%d)", msg->msg_id, remote_addr.sun_path,bytes_rec);
+    //emscripten_log(EM_LOG_CONSOLE, "resmgr: msg %d received from %s (%d)", msg->msg_id, remote_addr.sun_path,bytes_rec);
 
     if (msg->msg_id == REGISTER_DRIVER) {
       
@@ -186,6 +183,8 @@ int main() {
       }
       else {
 	msg->_errno = ENOTDIR;
+
+	emscripten_log(EM_LOG_CONSOLE, "mount: %s not a directory", msg->_u.mount_msg.pathname);
       }
 
       msg->msg_id |= 0x80;
@@ -203,8 +202,9 @@ int main() {
 	msg->_u.io_msg.len = strlen((char *)(msg->_u.io_msg.buf))+1;
 
 	sendto(sock, buf, 1256, 0, (struct sockaddr *) &tty_addr, sizeof(tty_addr));
+	emscripten_log(EM_LOG_CONSOLE, "Mount path: %s", pathname);
 
-	if (strcmp((const char *)&(pathname[0]),"/bin") == 0) {
+	if (strcmp((const char *)&(pathname[0]),"/etc") == 0) {
 
 	  memset(buf, 0, 1256);
 	  msg->msg_id = WRITE;
@@ -277,36 +277,23 @@ int main() {
 
 	emscripten_log(EM_LOG_CONSOLE, "vnode found: %s",vnode->name);
 
-	if (vnode->type == VDEV) {
+	if ( (vnode->type == VDEV) || (vnode->type == VMOUNT) ) {
 
-	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device or mount point: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
 	  // Forward msg to driver
 
-	  void * item = malloc(sizeof(struct sockaddr_un));
-
-	  memcpy(item, &remote_addr, sizeof(remote_addr));
-	  
-	  add_item_to_unordered_map(process_peer_map, msg->pid, item);
-	  
 	  msg->_u.open_msg.type = vnode->_u.dev.type;
 	  msg->_u.open_msg.major = vnode->_u.dev.major;
 	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
 	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
-
+	  
 	  struct sockaddr_un driver_addr;
 
 	  driver_addr.sun_family = AF_UNIX;
 	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
 	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
-	  
-	}
-	else if (vnode->type == VMOUNT) {
-
-	  emscripten_log(EM_LOG_CONSOLE, "vnode is a mount point: %d %d %d",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor);
-
-	  // TODO
 	  
 	}
 	else if (vnode->type == VFILE) {
@@ -346,14 +333,7 @@ int main() {
 
       // Forward response to process
 
-      struct unordered_map * item = get_item_from_unordered_map(process_peer_map, msg->pid);
-
-      if (item) {
-
-	sendto(sock, buf, 1256, 0, (struct sockaddr *)item->data, sizeof(struct sockaddr_un));
-
-	remove_item_from_unordered_map(process_peer_map, item);
-      }
+      sendto(sock, buf, 1256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
       
     }
     else if (msg->msg_id == CLOSE) {
@@ -376,12 +356,6 @@ int main() {
 	  // No more fd, close the fd in the driver
 
 	  // Forward msg to driver
-
-	  void * item = malloc(sizeof(struct sockaddr_un));
-
-	  memcpy(item, &remote_addr, sizeof(remote_addr));
-	  
-	  add_item_to_unordered_map(process_peer_map, msg->pid, item);
 
 	  msg->_u.close_msg.fd = remote_fd;
 
@@ -416,14 +390,22 @@ int main() {
 
       // Forward response to process
 
-      struct unordered_map * item = get_item_from_unordered_map(process_peer_map, msg->pid);
+      sendto(sock, buf, 256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
+      
+    }
+    else if (msg->msg_id == SETSID) {
 
-      if (item) {
+      emscripten_log(EM_LOG_CONSOLE, "SETSID from %d", msg->pid);
 
-	sendto(sock, buf, 256, 0, (struct sockaddr *)item->data, sizeof(struct sockaddr_un));
+      msg->_u.setsid_msg.sid = process_setsid(msg->pid);
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
 
-	remove_item_from_unordered_map(process_peer_map, item);
-      }
+      if (msg->_u.setsid_msg.sid < 0)
+	msg->_errno = EPERM;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       
     }
   }

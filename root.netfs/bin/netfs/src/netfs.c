@@ -93,6 +93,8 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
 
 static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
+  emscripten_log(EM_LOG_CONSOLE,"netfs_open: %s", pathname);
+  
   if (do_fetch_head(pathname) == 0) {
 
     ++last_fd;
@@ -238,10 +240,34 @@ int main() {
       msg->_u.mount_msg.minor = minor;
 
       memset(msg->_u.mount_msg.pathname, 0, sizeof(msg->_u.mount_msg.pathname));
-      strcpy((char *)&msg->_u.mount_msg.pathname[0], "/bin");
+
+      if (minor == 1)
+	strcpy((char *)&msg->_u.mount_msg.pathname[0], "/bin");
+      else if (minor == 2)
+	strcpy((char *)&msg->_u.mount_msg.pathname[0], "/etc");
   
       sendto(sock, buf, 1256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
     }
+    else if (msg->msg_id == (MOUNT|0x80)) {
+
+      if (msg->_u.mount_msg.minor == 1) {
+	
+	minor += 1;
+	
+	register_device(minor, &netfs_ops);
+      
+	msg->msg_id = REGISTER_DEVICE;
+	msg->_u.dev_msg.dev_type = FS_DEV;	
+	msg->_u.dev_msg.major = major;
+	msg->_u.dev_msg.minor = minor;
+
+	memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
+	sprintf((char *)&msg->_u.dev_msg.dev_name[0], "netfs%d", msg->_u.dev_msg.minor);
+  
+	sendto(sock, buf, 1256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
+      }
+    }
+    
     else if (msg->msg_id == OPEN) {
 
       int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.dev_msg.minor);
@@ -256,11 +282,9 @@ int main() {
 	msg->_u.open_msg.fd = -1;
 	msg->_errno = ENOENT;
       }
-	
-
-      msg->msg_id |= 0x80;
-      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
       
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == READ) {
 
