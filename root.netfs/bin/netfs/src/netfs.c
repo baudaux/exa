@@ -20,6 +20,7 @@
 #include <stropts.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "msg.h"
 
@@ -48,6 +49,8 @@ struct fd_entry {
   char pathname[1024];
   int flags;
   unsigned short mode;
+  unsigned int size;
+  unsigned int offset;
 };
 
 static unsigned short major;
@@ -59,13 +62,15 @@ static int last_fd = -1;
 
 static struct fd_entry fds[64];
 
-int add_fd_entry(int fd, pid_t pid, unsigned short minor, const char * pathname, int flags, unsigned short mode) {
+int add_fd_entry(int fd, pid_t pid, unsigned short minor, const char * pathname, int flags, unsigned short mode, unsigned int size) {
 
   fds[fd].pid = pid;
   fds[fd].minor = minor;
   strcpy(fds[fd].pathname, pathname);
   fds[fd].flags = flags;
   fds[fd].mode = mode;
+  fds[fd].size = size;
+  fds[fd].offset = 0;
   
   return fd;
 }
@@ -82,9 +87,20 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
 	cache: 'default' };
       
       fetch(UTF8ToString(pathname), myInit).then(function (response) {
+	  
+	  //console.log(response.headers.get('Accept-Ranges'));
+	  //console.log(response.headers.get('Content-Length'));
 
-	  if (response.ok)
-	    wakeUp(0);
+	  if (response.ok) {
+
+	    let contentLength = 0;
+
+	    if (response.headers.get('Content-Length') === 'string') {
+	      contentLength = parseInt(response.headers.get('Content-Length'));
+	    }
+	    
+	    wakeUp(contentLength);
+	  }
 	  else
 	    wakeUp(-1);
     });
@@ -94,12 +110,14 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
 static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
   emscripten_log(EM_LOG_CONSOLE,"netfs_open: %s", pathname);
+
+  int size = do_fetch_head(pathname);
   
-  if (do_fetch_head(pathname) == 0) {
+  if (size >= 0) {
 
     ++last_fd;
     
-    add_fd_entry(last_fd, pid, minor, pathname, flags, mode);
+    add_fd_entry(last_fd, pid, minor, pathname, flags, mode, size);
   
     return last_fd;
   }
@@ -288,11 +306,17 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      //devices[fds[msg->_u.io_msg.fd]]->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      struct message * reply = (struct message *) malloc(sizeof(struct message)+msg->_u.io_msg.len);
+
+      reply->_u.io_msg.len = get_device(msg->_u.open_msg.minor)->read(msg->_u.io_msg.fd, reply->_u.io_msg.buf, msg->_u.io_msg.len);
+
+      reply->msg_id = READ|0x80;
+      
+      sendto(sock, reply, sizeof(struct message)+reply->_u.io_msg.len, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == WRITE) {
       
-      //devices[fds[msg->_u.io_msg.fd]]->write(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
+      
     }
     else if (msg->msg_id == IOCTL) {
 

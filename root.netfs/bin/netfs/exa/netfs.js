@@ -1175,7 +1175,7 @@ var tempI64;
 var ASM_CONSTS = {
   
 };
-function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers(); var myInit = { method: 'HEAD', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) wakeUp(0); else wakeUp(-1); }); }); }
+function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers(); var myInit = { method: 'HEAD', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) { let contentLength = 0; if (response.headers.get('Content-Length') === 'string') { contentLength = parseInt(response.headers.get('Content-Length')); } wakeUp(contentLength); } else wakeUp(-1); }); }); }
 
 
 
@@ -6203,7 +6203,7 @@ function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp)
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6618,6 +6618,9 @@ var asm = createWasm();
 var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
 
 /** @type {function(...*):?} */
+var _malloc = Module["_malloc"] = createExportWrapper("malloc");
+
+/** @type {function(...*):?} */
 var _main = Module["_main"] = createExportWrapper("main");
 
 /** @type {function(...*):?} */
@@ -6631,9 +6634,6 @@ var _htons = Module["_htons"] = createExportWrapper("htons");
 
 /** @type {function(...*):?} */
 var _ntohs = Module["_ntohs"] = createExportWrapper("ntohs");
-
-/** @type {function(...*):?} */
-var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
 var _free = Module["_free"] = createExportWrapper("free");
@@ -6700,7 +6700,7 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
 var ___start_em_js = Module['___start_em_js'] = 1788;
-var ___stop_em_js = Module['___stop_em_js'] = 2101;
+var ___stop_em_js = Module['___stop_em_js'] = 2267;
 
 
 
