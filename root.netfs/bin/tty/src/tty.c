@@ -89,7 +89,7 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
       let msg = {};
       msg.type = 2;
-      msg.data = UTF8ToString($0);
+      msg.data = UTF8ToString($0, $1);
 	  
       Module["term_channel"].port1.postMessage(msg);
 	  
@@ -253,9 +253,11 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d, %d", msg->pid, msg->_u.open_msg.minor);
 
-      int fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
+      int remote_fd = get_device(msg->_u.open_msg.minor)->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
-      msg->_u.open_msg.fd = fd;
+      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN -> %d", remote_fd);
+
+      msg->_u.open_msg.remote_fd = remote_fd;
 
       msg->msg_id |= 0x80;
       sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
@@ -268,7 +270,7 @@ int main() {
     }
     else if (msg->msg_id == WRITE) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: WRITE from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "tty: WRITE from %d, length=%d", msg->pid, msg->_u.io_msg.len);
 
       if (msg->_u.io_msg.fd == -1) {
 

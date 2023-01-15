@@ -232,6 +232,8 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   processes[pid].fds[i].major = major;
   processes[pid].fds[i].minor = minor;
 
+  //emscripten_log(EM_LOG_CONSOLE,"process_create_fd: %d, %d, %d (%d)", pid, remote_fd, processes[pid].last_fd, i);
+
   return processes[pid].last_fd;
 }
 
@@ -242,11 +244,15 @@ int process_get_fd(pid_t pid, int fd, unsigned char * type, unsigned short * maj
     if (processes[pid].fds[i].fd == fd) {
       *type = processes[pid].fds[i].type;
       *major = processes[pid].fds[i].major;
-      *remote_fd = processes[pid].fds[i].minor;
+      *remote_fd = processes[pid].fds[i].remote_fd;
+
+      //emscripten_log(EM_LOG_CONSOLE,"process_get_fd: %d, %d, %d (%d)", pid, *remote_fd, fd, i);
 
       return 0;
     }
   }
+
+  //emscripten_log(EM_LOG_CONSOLE,"process_get_fd: %d, %d not found", pid, fd);
 
   return -1;
 }
@@ -258,10 +264,14 @@ int process_close_fd(pid_t pid, int fd) {
     if (processes[pid].fds[i].fd == fd) {
 
       processes[pid].fds[i].fd = -1;
+
+      //emscripten_log(EM_LOG_CONSOLE,"process_close_fd: %d, %d (%i)", pid, fd, i);
       
       return 0;
     }
   }
+
+  //emscripten_log(EM_LOG_CONSOLE,"process_close_fd: %d, %d not found", pid, fd);
 
   return -1;
 }
@@ -276,6 +286,7 @@ int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd
 
 	if ( (processes[j].fds[i].type == type) && (processes[j].fds[i].major == major) && (processes[j].fds[i].remote_fd == remote_fd) ) {
 
+	  //emscripten_log(EM_LOG_CONSOLE,"process_find_open_fd: %d, %d, %d", j, j, remote_fd);
 	  return 1;
 	  
 	}
@@ -283,7 +294,7 @@ int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd
     }
   }
 
-  return 0;
+  return -1;
 }
 
 struct sockaddr_un * process_get_peer_addr(pid_t pid) {

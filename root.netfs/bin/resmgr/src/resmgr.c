@@ -34,23 +34,30 @@
 #define RESMGR_PATH RESMGR_ROOT "/" RESMGR_FILE
 
 static char * starting_exa =  "\r\n"
-"         __            __         \r\n"
-"        /  \\----------/  \\        \r\n"
-"        |                |        \r\n"
-"        \\                /        \r\n"
-"         \\              /         \r\n"
-"          \\            /          \r\n"
-"    _______|           |_______   \r\n"
-"   /                           \\  \r\n"
-"  |         EXA v0.1.0          | \r\n"
-"   \\_______            ________/  \r\n"
-"           /           \\          \r\n"
-"	  /             \\          \r\n"
-"	 /               \\         \r\n"
-"	/      _____      \\        \r\n"
-"       /      /     \\      \\      \r\n"
-"      |      /       \\      |     \r\n"
-"      \\_____/         \\_____/     \r\n"
+"              ...                ...              \r\n"
+"            .0O0O:'.':..,,,...;'';O0:.            \r\n"
+"            0Oo0...'....;.,..'.....0OP.           \r\n"
+"            lP:..;..,._....._.,.;..o0p.           \r\n"
+"            '........,e),.,(e,....,..i            \r\n"
+"             l,..;.....,aaa,..,...;..j            \r\n"
+"             i.....(-;:aaaaa;;-):...l             \r\n"
+"              (,..:.((..aaa..))..;..)             \r\n"
+"               ;......(((O)))..:...!              \r\n"
+"       ..'.....'..exa.:.',':.;:os'.:...',,'.      \r\n"
+"    ,ldxkxo:...'...';:;axel:':;.;.;...'lkkkxl;.   \r\n"
+"  .:00Okxxxd:....,..,..;......'....:..:k00OOOk,,  \r\n"
+"  ;.0Okxxxxdo'.,..,..'....:.....;.:...:OKK00Ok,:. \r\n"
+"  .:OOkxxdlc,...'..;....'....'..,:..  .;okOOO.;,  \r\n"
+"    ';:;,..   ......'..,.;.'..,.,:...    ..''..   \r\n"
+"             .;,'...:...,...:......,;.            \r\n"
+"            .odl:;,'',,'',''.'..,;clo:.           \r\n"
+"           .cxdooolc:;;       ;:cloddddc,'..      \r\n" 
+"         .,cdddooool:;        ;ldkkkkkkkkdl,.     \r\n"
+"       ,oxxdddddddd:.          ,dO000O00Okxd:.    \r\n"
+"      ;kOkddddddddo'            :k0K00K00OOkx,    \r\n"
+"      l;;;:;;;:xodo            .lO;,:;:;,:;:0'    \r\n"
+"      .;,:;:;,:;:.              .;,:;:;,:;:l.     \r\n"
+"        .,..,..,                   ';:::,.        \r\n"
   "\r\n";
 
 int main() {
@@ -364,9 +371,13 @@ int main() {
 	  driver_addr.sun_family = AF_UNIX;
 	  strcpy(driver_addr.sun_path, device_get_driver(type, major)->peer);
 
+	  emscripten_log(EM_LOG_CONSOLE, "CLOSE send to: %s", driver_addr.sun_path);
+
 	  sendto(sock, buf, 256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
 	}
 	else {
+
+	  emscripten_log(EM_LOG_CONSOLE, "CLOSE: do not close");
 
 	  // Other fd are there, do not close fd in the driver
 
@@ -378,6 +389,8 @@ int main() {
       }
       else {
 
+	emscripten_log(EM_LOG_CONSOLE, "CLOSE: not found");
+
 	msg->msg_id |= 0x80;
 	msg->_errno = EBADF;
 
@@ -386,7 +399,7 @@ int main() {
     }
     else if (msg->msg_id == (CLOSE|0x80)) {
 
-      emscripten_log(EM_LOG_CONSOLE, "Response from CLOSE from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "Response from CLOSE from %d (%s)", msg->pid, process_get_peer_addr(msg->pid)->sun_path);
 
       // Forward response to process
 

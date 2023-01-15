@@ -6097,7 +6097,7 @@ var ASM_CONSTS = {
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","wasi_snapshot_preview1.fd_read","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -7068,10 +7068,7 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
-
-	
-    }
-					
+    }				
     
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
   if (!calledRun) run();

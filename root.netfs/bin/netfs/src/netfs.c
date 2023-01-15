@@ -107,6 +107,54 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
   });
 });
 
+EM_JS(int, do_fetch, (const char * pathname, unsigned int offset, void * buf, unsigned int count), {
+    
+  return Asyncify.handleSleep(function (wakeUp) {
+
+      var myHeaders = new Headers({'Range': 'bytes='+offset+'-'+(offset+count-1)});
+
+      var myInit = { method: 'GET',
+	headers: myHeaders,
+	mode: 'cors',
+	cache: 'default' };
+      
+      fetch(UTF8ToString(pathname), myInit).then(function (response) {
+	  
+	  //console.log(response.headers.get('Accept-Ranges'));
+	  //console.log(response.headers.get('Content-Length'));
+
+	  if (response.ok) {
+
+	    let contentLength = 0;
+
+	    if (typeof response.headers.get('Content-Length') == 'string') {
+	      contentLength = parseInt(response.headers.get('Content-Length'));
+	    }
+
+	    /*response.arrayBuffer().then(buffer => {
+		
+		Module.HEAPU8.set(buffer, buf);
+		
+		wakeUp(contentLength);
+		});*/
+
+	    response.text().then(text => {
+
+		//console.log(text);
+		stringToUTF8(text, buf, count);
+		
+		//Module.HEAPU8.set(buffer, buf);
+		
+		wakeUp(contentLength);
+		})
+	    
+	  }
+	  else
+	    wakeUp(-1);
+    });
+  });
+});
+
 static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
   emscripten_log(EM_LOG_CONSOLE,"netfs_open: %s", pathname);
@@ -118,6 +166,8 @@ static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, 
     ++last_fd;
     
     add_fd_entry(last_fd, pid, minor, pathname, flags, mode, size);
+
+    emscripten_log(EM_LOG_CONSOLE,"netfs_open -> %d %d %d", last_fd, pid, minor);
   
     return last_fd;
   }
@@ -127,7 +177,18 @@ static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, 
 
 static ssize_t netfs_read(int fd, void * buf, size_t count) {
 
-  return 0;
+  emscripten_log(EM_LOG_CONSOLE,"netfs_read: %d %d", fd, count);
+  
+  int size = do_fetch(fds[fd].pathname, fds[fd].offset, buf, count);
+
+  if (size >= 0) {
+
+    fds[fd].offset += size;
+
+    return size;
+  }
+  
+  return -1;
 }
 
 static ssize_t netfs_write(int fd, const void * buf, size_t count) {
@@ -248,7 +309,7 @@ int main() {
       if (msg->_errno)
 	continue;
 
-      emscripten_log(EM_LOG_CONSOLE,"REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
+      emscripten_log(EM_LOG_CONSOLE, "REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
 
       unsigned short minor = msg->_u.dev_msg.minor;
 
@@ -288,7 +349,7 @@ int main() {
     
     else if (msg->msg_id == OPEN) {
 
-      int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.dev_msg.minor);
+      int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
       if (fd >= 0) {
 
@@ -308,9 +369,24 @@ int main() {
 
       struct message * reply = (struct message *) malloc(sizeof(struct message)+msg->_u.io_msg.len);
 
-      reply->_u.io_msg.len = get_device(msg->_u.open_msg.minor)->read(msg->_u.io_msg.fd, reply->_u.io_msg.buf, msg->_u.io_msg.len);
-
       reply->msg_id = READ|0x80;
+      reply->pid = msg->pid;
+      reply->_u.io_msg.fd = msg->_u.io_msg.fd;
+      
+      struct device_ops * dev = get_device(fds[msg->_u.io_msg.fd].minor);
+
+      if (dev) {
+	
+	reply->_u.io_msg.len = dev->read(msg->_u.io_msg.fd, reply->_u.io_msg.buf, msg->_u.io_msg.len);
+	reply->_errno = 0;
+
+	emscripten_log(EM_LOG_CONSOLE, "READ successful: %d bytes", reply->_u.io_msg.len);
+      }
+      else {
+
+	emscripten_log(EM_LOG_CONSOLE, "READ error: %d %d", msg->_u.io_msg.fd, fds[msg->_u.io_msg.fd].minor);
+	reply->_errno = ENXIO;
+      }
       
       sendto(sock, reply, sizeof(struct message)+reply->_u.io_msg.len, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
