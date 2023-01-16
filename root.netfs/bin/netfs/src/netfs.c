@@ -28,8 +28,8 @@
 
 #define NETFS_VERSION "netfs v0.1.0"
 
-#define NETFS_PATH "/tmp2/netfs.peer"
-#define RESMGR_PATH "/tmp2/resmgr.peer"
+#define NETFS_PATH "/var/netfs.peer"
+#define RESMGR_PATH "/var/resmgr.peer"
 
 #define NB_NETFS_MAX  16
 
@@ -95,7 +95,7 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
 
 	    let contentLength = 0;
 
-	    if (response.headers.get('Content-Length') === 'string') {
+	    if (typeof response.headers.get('Content-Length') == 'string') {
 	      contentLength = parseInt(response.headers.get('Content-Length'));
 	    }
 	    
@@ -177,7 +177,12 @@ static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, 
 
 static ssize_t netfs_read(int fd, void * buf, size_t count) {
 
-  emscripten_log(EM_LOG_CONSOLE,"netfs_read: %d %d", fd, count);
+  emscripten_log(EM_LOG_CONSOLE,"netfs_read: %d %d %d %d", fd, count, fds[fd].offset, fds[fd].size);
+
+  if (fds[fd].offset >= fds[fd].size) {
+
+    return 0;
+  }
   
   int size = do_fetch(fds[fd].pathname, fds[fd].offset, buf, count);
 

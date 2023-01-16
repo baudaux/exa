@@ -3882,6 +3882,8 @@ var ASM_CONSTS = {
   		  }
   		  else {
   		      sock.recv_queue.push(messageEvent.data);
+  
+  		      console.log(messageEvent);
   		      
   		      if (sock.notif)
   			  sock.notif();
@@ -3890,7 +3892,7 @@ var ASM_CONSTS = {
   
   	      if (window.frameElement.getAttribute('pid') != "1") {
   
-  		  let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  		  let bc = new BroadcastChannel("/var/resmgr.peer");
   
   		  let buf = Module._malloc(256);
   
@@ -5136,7 +5138,7 @@ var ASM_CONSTS = {
   
   	    if (window.frameElement.getAttribute('pid') != "1") {
   
-  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   
   		let buf = Module._malloc(256);
   

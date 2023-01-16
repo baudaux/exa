@@ -1,4 +1,3 @@
 # inittab pour linux
-id:1:initdefault:
-rc::bootwait:/etc/rc
-1:1:respawn:/etc/getty 9600 tty1
+id:2:initdefault:
+1:12345:respawn:/bin/agetty 9600 tty1

@@ -26,8 +26,8 @@
 
 #define TTY_VERSION "tty v0.1.0"
 
-#define TTY_PATH "/tmp2/tty.peer"
-#define RESMGR_PATH "/tmp2/resmgr.peer"
+#define TTY_PATH "/var/tty.peer"
+#define RESMGR_PATH "/var/resmgr.peer"
 
 #define NB_TTY_MAX  16
 

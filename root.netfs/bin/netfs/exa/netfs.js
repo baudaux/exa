@@ -1175,7 +1175,7 @@ var tempI64;
 var ASM_CONSTS = {
   
 };
-function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers(); var myInit = { method: 'HEAD', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) { let contentLength = 0; if (response.headers.get('Content-Length') === 'string') { contentLength = parseInt(response.headers.get('Content-Length')); } wakeUp(contentLength); } else wakeUp(-1); }); }); }
+function do_fetch_head(pathname) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers(); var myInit = { method: 'HEAD', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) { let contentLength = 0; if (typeof response.headers.get('Content-Length') == 'string') { contentLength = parseInt(response.headers.get('Content-Length')); } wakeUp(contentLength); } else wakeUp(-1); }); }); }
 function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(function (wakeUp) { var myHeaders = new Headers({'Range': 'bytes='+offset+'-'+(offset+count-1)}); var myInit = { method: 'GET', headers: myHeaders, mode: 'cors', cache: 'default' }; fetch(UTF8ToString(pathname), myInit).then(function (response) { if (response.ok) { let contentLength = 0; if (typeof response.headers.get('Content-Length') == 'string') { contentLength = parseInt(response.headers.get('Content-Length')); } response.text().then(text => { stringToUTF8(text, buf, count); wakeUp(contentLength); }) } else wakeUp(-1); }); }); }
 
 
@@ -3893,7 +3893,7 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   
   	      if (window.frameElement.getAttribute('pid') != "1") {
   
-  		  let bc = new BroadcastChannel("/tmp2/resmgr.peer");
+  		  let bc = new BroadcastChannel("/var/resmgr.peer");
   
   		  let buf = Module._malloc(256);
   
@@ -4965,7 +4965,7 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   
   		var mode = varargs ? SYSCALLS.get() : 0;
   
-  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   		
   		let buf = Module._malloc(1256);
   
@@ -5219,7 +5219,7 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   
   	    if (window.frameElement.getAttribute('pid') != "1") {
   
-  		let bc = Module.get_broadcast_channel("/tmp2/resmgr.peer");
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   
   		let buf = Module._malloc(256);
   
@@ -6704,7 +6704,7 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
 var ___start_em_js = Module['___start_em_js'] = 1884;
-var ___stop_em_js = Module['___stop_em_js'] = 3013;
+var ___stop_em_js = Module['___stop_em_js'] = 3019;
 
 
 

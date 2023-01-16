@@ -42,9 +42,12 @@ void device_init() {
 
   // Add /etc for netfs
   vfs_add_dir(vnode,"etc");
+  
+  // Add /var
+  struct vnode * var = vfs_add_dir(vnode,"var");
 
-  // Add /tmp2 for early storage (socket path for example)
-  vfs_add_dir(vnode,"tmp2");
+  // Add /var/run
+  vfs_add_dir(var,"run"); 
 }
 
 unsigned short device_register_driver(unsigned char type, const char * name, const char * peer) {

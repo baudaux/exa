@@ -13,6 +13,9 @@
 #ifndef _VFS_H
 #define _VFS_H
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 
 enum vnode_type {
@@ -69,6 +72,10 @@ struct vnode * vfs_add_path(const char * pathname);
 struct vnode * vfs_find_node(const char * pathname);
 
 struct vnode * vfs_create_file(const char * pathname);
+
+int vfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor);
+struct vnode * vfs_get_vnode(int fd);
+int vfs_close(int fd);
 
 void vfs_dump();
 

@@ -29,7 +29,7 @@
 
 /* Be careful when changing this path as it may be also used in javascript */
 
-#define RESMGR_ROOT "/tmp2"
+#define RESMGR_ROOT "/var"
 #define RESMGR_FILE "resmgr.peer"
 #define RESMGR_PATH RESMGR_ROOT "/" RESMGR_FILE
 
@@ -90,6 +90,12 @@ int main() {
   /* ... so we need to add it in vfs */
   struct vnode * vnode = vfs_find_node(RESMGR_ROOT);
   vfs_add_file(vnode, RESMGR_FILE);
+
+  /* Register vfs driver */
+  unsigned short vfs_major = device_register_driver(FS_DEV, "vfs", RESMGR_PATH);
+  unsigned short vfs_minor = 1;
+
+  device_register_device(FS_DEV, vfs_major, vfs_minor, "vfs1");
 
   // First, we create tty process
   
@@ -279,54 +285,52 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "OPEN from %d: %x %x %s", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
-      struct vnode * vnode = vfs_find_node((const char *)msg->_u.open_msg.pathname);
-      if (vnode) {
+      int remote_fd = vfs_open((const char *)msg->_u.open_msg.pathname, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, vfs_minor);
+      
+      if (remote_fd == 0) {
 
-	emscripten_log(EM_LOG_CONSOLE, "vnode found: %s",vnode->name);
+	struct vnode * vnode = vfs_get_vnode(remote_fd);
 
-	if ( (vnode->type == VDEV) || (vnode->type == VMOUNT) ) {
+	emscripten_log(EM_LOG_CONSOLE, "vnode is a device or mount point: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
-	  emscripten_log(EM_LOG_CONSOLE, "vnode is a device or mount point: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	// Forward msg to driver
 
-	  // Forward msg to driver
-
-	  msg->_u.open_msg.type = vnode->_u.dev.type;
-	  msg->_u.open_msg.major = vnode->_u.dev.major;
-	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
-	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	msg->_u.open_msg.type = vnode->_u.dev.type;
+	msg->_u.open_msg.major = vnode->_u.dev.major;
+	msg->_u.open_msg.minor = vnode->_u.dev.minor;
+	strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 	  
-	  struct sockaddr_un driver_addr;
+	struct sockaddr_un driver_addr;
 
-	  driver_addr.sun_family = AF_UNIX;
-	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	driver_addr.sun_family = AF_UNIX;
+	strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
-	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+	sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
 	  
-	}
-	else if (vnode->type == VFILE) {
+      }
+      else if (remote_fd > 0) {
 
-	  // TODO
-	}
-	else {
+	msg->msg_id |= 0x80;
+	msg->_errno = 0;
+	  
+	msg->_u.open_msg.remote_fd = remote_fd;
+	msg->_u.open_msg.type = FS_DEV;
+	msg->_u.open_msg.major = vfs_major;
+	msg->_u.open_msg.minor = vfs_minor;
+	strcpy((char *)msg->_u.open_msg.peer, RESMGR_PATH);
+	  
+	msg->_u.open_msg.fd = process_create_fd(msg->pid, msg->_u.open_msg.remote_fd, msg->_u.open_msg.type, msg->_u.open_msg.major, msg->_u.open_msg.minor);
 
-	  // TODO
-	}
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       }
       else {
 
 	emscripten_log(EM_LOG_CONSOLE, "vnode not found");
 
-	/*if (msg->_u.open_msg.flags & O_CREAT) {
-
-	  // TODO
-	}
-	else*/ {
-
-	  msg->msg_id |= 0x80;
-	  msg->_errno = ENOENT;
-
-	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
-	}
+	msg->msg_id |= 0x80;
+	msg->_errno = ENOENT;
+	
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       }
     }
     else if (msg->msg_id == (OPEN|0x80)) {
@@ -366,14 +370,34 @@ int main() {
 
 	  msg->_u.close_msg.fd = remote_fd;
 
-	  struct sockaddr_un driver_addr;
+	  if (major != vfs_major) {
 
-	  driver_addr.sun_family = AF_UNIX;
-	  strcpy(driver_addr.sun_path, device_get_driver(type, major)->peer);
+	    struct sockaddr_un driver_addr;
 
-	  emscripten_log(EM_LOG_CONSOLE, "CLOSE send to: %s", driver_addr.sun_path);
+	    driver_addr.sun_family = AF_UNIX;
+	    strcpy(driver_addr.sun_path, device_get_driver(type, major)->peer);
 
-	  sendto(sock, buf, 256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+	    emscripten_log(EM_LOG_CONSOLE, "CLOSE send to: %s", driver_addr.sun_path);
+
+	    sendto(sock, buf, 256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+	  }
+	  else {
+
+	    if (vfs_close(remote_fd) >= 0) {
+
+	      msg->msg_id |= 0x80;
+	      msg->_errno = 0;
+
+	      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	    }
+	    else {
+
+	      msg->msg_id |= 0x80;
+	      msg->_errno = EBADF;
+
+	      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	    }
+	  }
 	}
 	else {
 

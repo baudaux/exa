@@ -12,12 +12,31 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <emscripten.h>
 
 #include "vfs.h"
 
 static struct vnode * vfs_root;
+
+struct fd_entry {
+
+  pid_t pid;
+  unsigned short minor;
+  char pathname[1024];
+  int flags;
+  unsigned short mode;
+  unsigned int size;
+  unsigned int offset;
+  struct vnode * vnode;
+};
+
+static int last_fd = 0; // keep 0 for latest open of dev type is dev or mount
+
+static struct fd_entry fds[64];
 
 int vfs_init() {
 
@@ -278,6 +297,69 @@ void vfs_dump_node(struct vnode * vnode, int indent) {
       link = link->next;
     }
   }
+}
+
+int add_fd_entry(int fd, pid_t pid, unsigned short minor, const char * pathname, int flags, unsigned short mode, unsigned int size, struct vnode * vnode) {
+
+  fds[fd].pid = pid;
+  fds[fd].minor = minor;
+  strcpy(fds[fd].pathname, pathname);
+  fds[fd].flags = flags;
+  fds[fd].mode = mode;
+  fds[fd].size = size;
+  fds[fd].offset = 0;
+  fds[fd].vnode = vnode;
+  
+  return fd;
+}
+
+int vfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
+
+  int remote_fd = -1;
+  
+  struct vnode * vnode = vfs_find_node(pathname);
+
+  if (vnode) {
+
+    if ( (vnode->type == VDEV) || (vnode->type == VMOUNT) ) {
+
+      remote_fd = 0;
+      fds[remote_fd].vnode = vnode;
+    }
+    else {
+
+      ++last_fd;
+
+      add_fd_entry(last_fd, pid, minor, pathname, flags, mode, 0, vnode);
+
+      remote_fd = last_fd;
+    }
+  }
+  else if (flags & O_CREAT) {
+
+    struct vnode * vfile = vfs_create_file(pathname);
+
+    if (vfile) {
+
+      ++last_fd;
+
+      add_fd_entry(last_fd, pid, minor, pathname, flags, mode, 0, vnode);
+      
+      remote_fd = last_fd;
+    }
+  }
+  
+  return remote_fd;
+}
+
+struct vnode * vfs_get_vnode(int fd) {
+
+  return fds[fd].vnode;
+}
+
+int vfs_close(int fd) {
+
+  return 0;
 }
 
 void vfs_dump() {
