@@ -76,6 +76,9 @@ struct vnode * vfs_create_file(const char * pathname);
 int vfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor);
 struct vnode * vfs_get_vnode(int fd);
 int vfs_close(int fd);
+ssize_t vfs_write(int fildes, const void *buf, size_t nbyte);
+
+int vfs_ioctl(int fd, int op);
 
 void vfs_dump();
 

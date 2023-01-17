@@ -67,6 +67,8 @@ struct process {
 
 void process_init();
 
+pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd);
+
 pid_t create_tty_process();
 pid_t create_netfs_process();
 pid_t create_init_process();

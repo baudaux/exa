@@ -3884,7 +3884,7 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   		  else {
   		      sock.recv_queue.push(messageEvent.data);
   
-  		      console.log(messageEvent);
+  		      //console.log(messageEvent);
   		      
   		      if (sock.notif)
   			  sock.notif();
@@ -4887,6 +4887,74 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   SYSCALLS.varargs = varargs;
   try {
   
+  
+        console.log("__syscall_fcntl: cmd="+cmd);
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  	
+  	    let buf_size = 256;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 17; // FCNTL
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    //cmd
+  	    buf2[16] = cmd & 0xff;
+  	    buf2[17] = (cmd >> 8) & 0xff;
+  	    buf2[18] = (cmd >> 16) & 0xff;
+  	    buf2[19] = (cmd >> 24) & 0xff;
+  	    
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (17|0x80)) {
+  		
+  		    wakeUp(0); // TODO: size
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});      
+  
+        return ret;
+  
+        /* Modified by Benoit Baudaux 17/1/2023 */
+        /* Following code is not executed */
       var stream = SYSCALLS.getStreamFromFD(fd);
       switch (cmd) {
         case 0: {
@@ -5377,11 +5445,6 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   	
   	    let len = count;
   
-  	    /*for (var i = 0; i < iovcnt; i++) {
-  		len += HEAPU32[(((iov)+(4))>>2)];
-  		iov += 8;
-  	    }*/
-  
   	    let buf_size = 20+len;
   
   	    let buf2 = new Uint8Array(buf_size);
@@ -5410,19 +5473,6 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   	    buf2[18] = (len >> 16) & 0xff;
   	    buf2[19] = (len >> 24) & 0xff;
   
-  	    /*buf_size = 20;
-  
-  	    for (var i = 0; i < iovcnt; i++) {
-  		let ptr = HEAPU32[((iov)>>2)];
-  		let l = HEAPU32[(((iov)+(4))>>2)];
-  
-  		buf.set(HEAPU8.slice(ptr,ptr+l),buf_size);
-  		
-  		buf_size += l;
-  		
-  		iov += 8;
-  		}*/
-  
   	    buf2.set(HEAPU8.slice(buf,buf+len),20);
   
   	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
@@ -5433,7 +5483,9 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   
   		if (msg2.buf[0] == (13|0x80)) {
   		
-  		    wakeUp(0); // TODO: size
+  		    let bytes_written = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  		
+  		    wakeUp(bytes_written);
   
   		    return 0;
   		}
@@ -6206,7 +6258,7 @@ function do_fetch(pathname,offset,buf,count) { return Asyncify.handleSleep(funct
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.do_fetch","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.do_fetch_head","env.do_fetch","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -7187,7 +7239,7 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
-    }				
+    }					
     
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
   if (!calledRun) run();

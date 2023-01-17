@@ -3883,7 +3883,7 @@ var ASM_CONSTS = {
   		  else {
   		      sock.recv_queue.push(messageEvent.data);
   
-  		      console.log(messageEvent);
+  		      //console.log(messageEvent);
   		      
   		      if (sock.notif)
   			  sock.notif();
@@ -4906,6 +4906,74 @@ var ASM_CONSTS = {
   SYSCALLS.varargs = varargs;
   try {
   
+  
+        console.log("__syscall_fcntl: cmd="+cmd);
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  	
+  	    let buf_size = 256;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 17; // FCNTL
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    //cmd
+  	    buf2[16] = cmd & 0xff;
+  	    buf2[17] = (cmd >> 8) & 0xff;
+  	    buf2[18] = (cmd >> 16) & 0xff;
+  	    buf2[19] = (cmd >> 24) & 0xff;
+  	    
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (17|0x80)) {
+  		
+  		    wakeUp(0); // TODO: size
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});      
+  
+        return ret;
+  
+        /* Modified by Benoit Baudaux 17/1/2023 */
+        /* Following code is not executed */
       var stream = SYSCALLS.getStreamFromFD(fd);
       switch (cmd) {
         case 0: {
@@ -4966,61 +5034,136 @@ var ASM_CONSTS = {
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
-  	    // TODO: fork from other process than resmgr
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
   
-  	    if (!Module.child_pid) {
+  	    function do_fork() {
   
-  		// Reserve 1 for resmgr, so start at 2
-  		
-  		Module.child_pid = 2;
+  		let channel = 'channel.1.'+Module.child_pid+'.fork';
+  
+  		if (!Module[channel]) {
+  
+  		    Module[channel] = new BroadcastChannel('channel.1.'+Module.child_pid+'.fork');
+  
+  		    Module[channel].onmessage = (function(_ch,_pid) {
+  
+  			return ((messageEvent) => {
+  
+  			    if (messageEvent.data == "continue_fork") {
+  
+  				//console.log("continue_fork");
+  
+  				if (Module[_ch]) {
+  
+  				    Module[_ch].postMessage(Module.HEAPU8);
+  
+  				    Asyncify.stackTop = stackSave();
+  				    Asyncify.stackBase = _emscripten_stack_get_base();
+  				    Asyncify.stackEnd = _emscripten_stack_get_end();
+  				    
+  				    Module[_ch].postMessage(JSON.stringify(Asyncify));
+  				}
+  			    }
+  			    else if (messageEvent.data == "end_fork") {
+  
+  				Module[_ch].close();
+  
+  				wakeUp(_pid);
+  			    }
+  
+  			});
+  		    })(channel,Module.child_pid);
+  
+  		    let msg = {
+  
+  			type: 3,   // fork
+  			pid: Module.child_pid
+  		    };
+  
+  		    window.parent.postMessage(msg);
+  		}
+  	    };
+  
+  	    if (pid == 1) {  // Fork called by resmgr
+  
+  		if (!Module.child_pid) {
+  
+  		    // Reserve 1 for resmgr, so start at 2
+  		    
+  		    Module.child_pid = 2;
+  		}
+  		else {
+  
+  		    Module.child_pid += 1;
+  		}
+  
+  		do_fork();
   	    }
   	    else {
   
-  		Module.child_pid += 1;
-  	    }
+  		console.log("!!!!!!! FORK from child !!!!!!!");
   
-  	    let channel = 'channel.1.'+Module.child_pid+'.fork';
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   
-  	    if (!Module[channel]) {
+  		let buf = Module._malloc(256);
   
-  		Module[channel] = new BroadcastChannel('channel.1.'+Module.child_pid+'.fork');
+  		Module.HEAPU8[buf] = 7; // FORK
   
-  		Module[channel].onmessage = (function(_ch,_pid) {
+  		/*//padding
+  		  buf[1] = 0;
+  		  buf[2] = 0;
+  		  buf[3] = 0;*/
   
-  		    return ((messageEvent) => {
+  		let pid = parseInt(window.frameElement.getAttribute('pid'));
   
-  			if (messageEvent.data == "continue_fork") {
+  		// pid
+  		Module.HEAPU8[buf+4] = pid & 0xff;
+  		Module.HEAPU8[buf+5] = (pid >> 8) & 0xff;
+  		Module.HEAPU8[buf+6] = (pid >> 16) & 0xff;
+  		Module.HEAPU8[buf+7] = (pid >> 24) & 0xff;
   
-  			    //console.log("continue_fork");
+  		// errno
+  		Module.HEAPU8[buf+8] = 0x0;
+  		Module.HEAPU8[buf+9] = 0x0;
+  		Module.HEAPU8[buf+10] = 0x0;
+  		Module.HEAPU8[buf+11] = 0x0;
   
-  			    if (Module[_ch]) {
+  		// child pid
+  		Module.HEAPU8[buf+12] = 0x0;
+  		Module.HEAPU8[buf+13] = 0x0;
+  		Module.HEAPU8[buf+14] = 0x0;
+  		Module.HEAPU8[buf+15] = 0x0;
   
-  				Module[_ch].postMessage(Module.HEAPU8);
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  		    
+  		    console.log(messageEvent);
   
-  				Asyncify.stackTop = stackSave();
-  				Asyncify.stackBase = _emscripten_stack_get_base();
-  				Asyncify.stackEnd = _emscripten_stack_get_end();
-  				
-  				Module[_ch].postMessage(JSON.stringify(Asyncify));
-  			    }
-  			}
-  			else if (messageEvent.data == "end_fork") {
+  		    let msg2 = messageEvent.data;
   
-  			    Module[_ch].close();
+  		    if (msg2.buf[0] == (7|0x80)) {
   
-  			    wakeUp(_pid);
-  			}
+  			Module['rcv_bc_channel'].set_handler(null);
   
-  		    });
-  		})(channel,Module.child_pid);
+  			Module.child_pid = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  			do_fork();
+  
+  			return 0;
+  		    }
+  
+  		    return -1;
+  		});
   
   		let msg = {
   
-                      type: 3,   // fork
-  		    pid: Module.child_pid
+  		    from: Module['rcv_bc_channel'].name,
+  		    buf: buf,
+  		    len: 256
   		};
+  		
+  		bc.postMessage(msg);
   
-  		window.parent.postMessage(msg);
+  		Module._free(buf);
+  		
   	    }
   	});
   
@@ -6099,7 +6242,7 @@ var ASM_CONSTS = {
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -7070,7 +7213,7 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
-    }				
+    }					
     
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
   if (!calledRun) run();

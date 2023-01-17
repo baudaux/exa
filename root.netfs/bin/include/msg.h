@@ -24,8 +24,9 @@ enum message_id {
   UNREGISTER_DRIVER,
   REGISTER_DEVICE,
   UNREGISTER_DEVICE,
-  MOUNT,
+  MOUNT = 5,
   UMOUNT,
+  FORK,
   
   SOCKET = 9,
   BIND = 10,
@@ -35,6 +36,7 @@ enum message_id {
   IOCTL,
   CLOSE = 15,
   SETSID,
+  FCNTL,
 };
 
 enum dev_type {
@@ -91,6 +93,18 @@ struct io_message {
   unsigned char buf[];
 };
 
+struct ioctl_message {
+  
+  int fd;
+  int op;
+};
+
+struct fcntl_message {
+  
+  int fd;
+  int cmd;
+};
+
 struct mount_message {
 
   unsigned char dev_type;
@@ -102,6 +116,11 @@ struct mount_message {
 struct setsid_message {
 
   pid_t sid;
+};
+
+struct fork_message {
+
+  pid_t child;
 };
 
 struct message {
@@ -120,8 +139,11 @@ struct message {
     struct open_message open_msg;
     struct close_message close_msg;
     struct io_message io_msg;
+    struct ioctl_message ioctl_msg;
+    struct fcntl_message fcntl_msg;
     struct mount_message mount_msg;
     struct setsid_message setsid_msg;
+    struct fork_message fork_msg;
     
   } _u;
 };

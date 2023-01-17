@@ -362,6 +362,22 @@ int vfs_close(int fd) {
   return 0;
 }
 
+int vfs_read() {
+
+}
+
+ssize_t vfs_write(int fildes, const void *buf, size_t nbyte) {
+
+  return nbyte;
+}
+
+int vfs_ioctl(int fd, int op) {
+
+  emscripten_log(EM_LOG_CONSOLE, "vfs_ioctl: %d %d", fd, op);
+
+  return -1;
+}
+
 void vfs_dump() {
 
   emscripten_log(EM_LOG_CONSOLE, "VFS dump");

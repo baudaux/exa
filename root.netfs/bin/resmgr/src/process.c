@@ -31,7 +31,7 @@ static int nb_processes = 0;
 
 static struct vnode * vfs_proc;
 
-pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd);
+pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd);
 
 void process_init() {
 
@@ -45,12 +45,12 @@ void process_init() {
     processes[i].pid = -1;
   }
 
-  fork_process(RESMGR_ID, NO_PARENT, "resmgr", "/bin/resmgr");
+  process_fork(RESMGR_ID, NO_PARENT, "resmgr", "/bin/resmgr");
 }
 
 pid_t create_tty_process() {
 
-  fork_process(TTY_ID, NO_PARENT, "tty", "/bin/tty");
+  process_fork(TTY_ID, NO_PARENT, "tty", "/bin/tty");
 
   pid_t pid = fork();
   
@@ -77,7 +77,7 @@ pid_t create_tty_process() {
 
 pid_t create_netfs_process() {
 
-  fork_process(NETFS_ID, NO_PARENT, "netfs", "/bin/netfs");
+  process_fork(NETFS_ID, NO_PARENT, "netfs", "/bin/netfs");
   
   pid_t pid = fork();
   
@@ -104,7 +104,7 @@ pid_t create_netfs_process() {
 
 pid_t create_init_process() {
 
-  fork_process(INIT_ID, NO_PARENT, "init", "/bin/init");
+  process_fork(INIT_ID, NO_PARENT, "init", "/bin/init");
   
   pid_t pid = fork();
   
@@ -129,7 +129,7 @@ pid_t create_init_process() {
   return 0;
 }
 
-pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
+pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
   if (pid < 0)
     pid = nb_processes;
@@ -158,8 +158,15 @@ pid_t fork_process(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
     processes[pid].term =  NULL;
   }
 
-  strcpy(processes[pid].name, name);
-  strcpy(processes[pid].cwd, cwd);
+  if (name)
+    strcpy(processes[pid].name, name);
+  else
+    strcpy(processes[pid].name, "");
+
+  if (cwd)
+    strcpy(processes[pid].cwd, cwd);
+  else
+    strcpy(processes[pid].cwd, "");
 
   if (ppid >= 0) {
     processes[pid].umask = processes[ppid].umask;

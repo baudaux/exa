@@ -286,7 +286,16 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+    }
+    else if (msg->msg_id == FCNTL) {
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: FCNTL from %d", msg->pid);
+
+      // TODO: go through resmgr
 
       msg->msg_id |= 0x80;
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));

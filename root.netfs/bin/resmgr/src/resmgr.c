@@ -383,20 +383,18 @@ int main() {
 	  }
 	  else {
 
+	    msg->msg_id |= 0x80;
+
 	    if (vfs_close(remote_fd) >= 0) {
-
-	      msg->msg_id |= 0x80;
-	      msg->_errno = 0;
-
-	      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	      
+	      msg->_errno = 0;  
 	    }
 	    else {
 
-	      msg->msg_id |= 0x80;
 	      msg->_errno = EBADF;
-
-	      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 	    }
+
+	    sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 	  }
 	}
 	else {
@@ -430,6 +428,78 @@ int main() {
       sendto(sock, buf, 256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
       
     }
+    else if (msg->msg_id == READ) {
+
+      emscripten_log(EM_LOG_CONSOLE, "READ from %d: %d %d", msg->pid, msg->_u.io_msg.fd, msg->_u.io_msg.len);
+
+    }
+    else if (msg->msg_id == WRITE) {
+
+      emscripten_log(EM_LOG_CONSOLE, "WRITE from %d: %d %d", msg->pid, msg->_u.io_msg.fd, msg->_u.io_msg.len);
+
+      unsigned char type;
+      unsigned short major;
+      int remote_fd;
+      
+      //TODO : read remaining bytes if needed
+
+      msg->msg_id |= 0x80;
+
+      // Get the fd of the process
+      if (process_get_fd(msg->pid, msg->_u.ioctl_msg.fd, &type, &major, &remote_fd) >= 0) {
+
+	if ( (major == vfs_major) && (vfs_write(remote_fd, msg->_u.io_msg.buf, msg->_u.io_msg.len) >= 0) ) {
+	      
+	  msg->_errno = 0;  
+	}
+	else {
+
+	  msg->_errno = EBADF;
+	}
+      }
+      else {
+
+	msg->_errno = EBADF;
+      }
+      
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+    }
+    else if (msg->msg_id == IOCTL) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "IOCTL from %d: %d %d", msg->pid, msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op);
+
+      unsigned char type;
+      unsigned short major;
+      int remote_fd;
+
+      msg->msg_id |= 0x80;
+
+      // Get the fd of the process
+      if (process_get_fd(msg->pid, msg->_u.ioctl_msg.fd, &type, &major, &remote_fd) >= 0) {
+
+	if ( (major == vfs_major) && (vfs_ioctl(remote_fd, msg->_u.ioctl_msg.op) >= 0) ) {
+	      
+	  msg->_errno = 0;  
+	}
+	else {
+
+	  msg->_errno = EBADF;
+	}
+      }
+      else {
+
+	msg->_errno = EBADF;
+      }
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+    }
+    else if (msg->msg_id == FCNTL) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "FCNTL from %d: %d %d", msg->pid, msg->_u.fcntl_msg.fd, msg->_u.fcntl_msg.cmd);
+
+    }
     else if (msg->msg_id == SETSID) {
 
       emscripten_log(EM_LOG_CONSOLE, "SETSID from %d", msg->pid);
@@ -441,6 +511,18 @@ int main() {
 
       if (msg->_u.setsid_msg.sid < 0)
 	msg->_errno = EPERM;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      
+    }
+    else if (msg->msg_id == FORK) {
+
+      emscripten_log(EM_LOG_CONSOLE, "FORK from %d", msg->pid);
+
+      msg->_u.fork_msg.child = process_fork(-1, msg->pid, NULL, NULL);
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       
