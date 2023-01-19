@@ -38,6 +38,9 @@
 #include <net/if.h>
 #include <sys/utsname.h>
 
+/* Modified by Benoit Baudaux 19/1/2023 */
+#include "../config.h"
+
 #include "strutils.h"
 #include "all-io.h"
 #include "nls.h"
@@ -50,6 +53,14 @@
 #include "env.h"
 
 #include "logindefs.h"
+
+/* Modified by Benoit Baudaux 19/1/2023 */
+#define HAVE_UTMP_H 1
+
+# ifdef HAVE_UTMP_H
+#  include <utmp.h>
+# endif
+
 
 #ifdef USE_PLYMOUTH_SUPPORT
 # include "plymouth-ctrl.h"
@@ -1125,8 +1136,9 @@ static void open_tty(const char *tty, struct termios *tp, struct options *op)
 			errno = 0;
 			closed = 1;
 
-			if (vhangup())
-				log_err(_("/dev/%s: vhangup() failed: %m"), tty);
+			/* Modified by Benoit Baudaux 19/1/2023 */
+			/*if (vhangup())
+			  log_err(_("/dev/%s: vhangup() failed: %m"), tty);*/
 		} else
 			close(fd);
 
@@ -2593,7 +2605,8 @@ static void log_err(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	dolog(LOG_ERR, fmt, ap);
+	/* Modified by Benoit Baudaux 19/1/2023 */
+	//dolog(LOG_ERR, fmt, ap);
 	va_end(ap);
 
 	exit_slowly(EXIT_FAILURE);
@@ -2604,7 +2617,8 @@ static void log_warn(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	dolog(LOG_WARNING, fmt, ap);
+	/* Modified by Benoit Baudaux 19/1/2023 */
+	//dolog(LOG_WARNING, fmt, ap);
 	va_end(ap);
 }
 

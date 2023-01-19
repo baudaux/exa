@@ -755,8 +755,6 @@ function preRun() {
 
     callRuntimeCallbacks(__ATPRERUN__);
 
-    console.log("$$$$$$ Init BroadcastChannel $$$$$$$$$");
-
     /* Modified by Benoit Baudaux 13/1/2023 */
 
 	Module['fd_table'] = {};
@@ -800,13 +798,13 @@ function initRuntime() {
 
   checkStackCookie();
 
-  SOCKFS.root = FS.mount(SOCKFS, {}, null);
-
+  
 if (!Module["noFSInit"] && !FS.init.initialized)
   FS.init();
 FS.ignorePermissions = false;
 
 TTY.init();
+SOCKFS.root = FS.mount(SOCKFS, {}, null);
   callRuntimeCallbacks(__ATINIT__);
 }
 
@@ -1026,7 +1024,7 @@ function createExportWrapper(name, fixedasm) {
 }
 
 var wasmBinaryFile;
-  wasmBinaryFile = 'tty.wasm';
+  wasmBinaryFile = 'mingetty.wasm';
   if (!isDataURI(wasmBinaryFile)) {
     wasmBinaryFile = locateFile(wasmBinaryFile);
   }
@@ -1211,9 +1209,9 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  2381: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
+  
 };
-function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]\n\r"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
+
 
 
 
@@ -1284,26 +1282,6 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
       }
     }
 
-  function getRandomDevice() {
-      if (typeof crypto == 'object' && typeof crypto['getRandomValues'] == 'function') {
-        // for modern web browsers
-        var randomBuffer = new Uint8Array(1);
-        return () => { crypto.getRandomValues(randomBuffer); return randomBuffer[0]; };
-      } else
-      if (ENVIRONMENT_IS_NODE) {
-        // for nodejs with or without crypto support included
-        try {
-          var crypto_module = require('crypto');
-          // nodejs has crypto support
-          return () => crypto_module['randomBytes'](1)[0];
-        } catch (e) {
-          // nodejs doesn't have crypto support
-        }
-      }
-      // we couldn't find a proper implementation, as Math.random() is not suitable for /dev/random, see emscripten-core/emscripten/pull/7096
-      return () => abort("no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: function(array) { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };");
-    }
-  
   var PATH = {isAbs:(path) => path.charAt(0) === '/',splitPath:(filename) => {
         var splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
         return splitPathRe.exec(filename).slice(1);
@@ -1368,6 +1346,26 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
       },join2:(l, r) => {
         return PATH.normalize(l + '/' + r);
       }};
+  
+  function getRandomDevice() {
+      if (typeof crypto == 'object' && typeof crypto['getRandomValues'] == 'function') {
+        // for modern web browsers
+        var randomBuffer = new Uint8Array(1);
+        return () => { crypto.getRandomValues(randomBuffer); return randomBuffer[0]; };
+      } else
+      if (ENVIRONMENT_IS_NODE) {
+        // for nodejs with or without crypto support included
+        try {
+          var crypto_module = require('crypto');
+          // nodejs has crypto support
+          return () => crypto_module['randomBytes'](1)[0];
+        } catch (e) {
+          // nodejs doesn't have crypto support
+        }
+      }
+      // we couldn't find a proper implementation, as Math.random() is not suitable for /dev/random, see emscripten-core/emscripten/pull/7096
+      return () => abort("no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: function(array) { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };");
+    }
   
   var PATH_FS = {resolve:function() {
         var resolvedPath = '',
@@ -3776,6 +3774,164 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
       },standardizePath:() => {
         abort('FS.standardizePath has been removed; use PATH.normalize instead');
       }};
+  var SYSCALLS = {DEFAULT_POLLMASK:5,calculateAt:function(dirfd, path, allowEmpty) {
+        if (PATH.isAbs(path)) {
+          return path;
+        }
+        // relative path
+        var dir;
+        if (dirfd === -100) {
+          dir = FS.cwd();
+        } else {
+          var dirstream = SYSCALLS.getStreamFromFD(dirfd);
+          dir = dirstream.path;
+        }
+        if (path.length == 0) {
+          if (!allowEmpty) {
+            throw new FS.ErrnoError(44);;
+          }
+          return dir;
+        }
+        return PATH.join2(dir, path);
+      },doStat:function(func, path, buf) {
+        try {
+          var stat = func(path);
+        } catch (e) {
+          if (e && e.node && PATH.normalize(path) !== PATH.normalize(FS.getPath(e.node))) {
+            // an error occurred while trying to look up the path; we should just report ENOTDIR
+            return -54;
+          }
+          throw e;
+        }
+        HEAP32[((buf)>>2)] = stat.dev;
+        HEAP32[(((buf)+(8))>>2)] = stat.ino;
+        HEAP32[(((buf)+(12))>>2)] = stat.mode;
+        HEAPU32[(((buf)+(16))>>2)] = stat.nlink;
+        HEAP32[(((buf)+(20))>>2)] = stat.uid;
+        HEAP32[(((buf)+(24))>>2)] = stat.gid;
+        HEAP32[(((buf)+(28))>>2)] = stat.rdev;
+        (tempI64 = [stat.size>>>0,(tempDouble=stat.size,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(40))>>2)] = tempI64[0],HEAP32[(((buf)+(44))>>2)] = tempI64[1]);
+        HEAP32[(((buf)+(48))>>2)] = 4096;
+        HEAP32[(((buf)+(52))>>2)] = stat.blocks;
+        (tempI64 = [Math.floor(stat.atime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.atime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(56))>>2)] = tempI64[0],HEAP32[(((buf)+(60))>>2)] = tempI64[1]);
+        HEAPU32[(((buf)+(64))>>2)] = 0;
+        (tempI64 = [Math.floor(stat.mtime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.mtime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(72))>>2)] = tempI64[0],HEAP32[(((buf)+(76))>>2)] = tempI64[1]);
+        HEAPU32[(((buf)+(80))>>2)] = 0;
+        (tempI64 = [Math.floor(stat.ctime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.ctime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(88))>>2)] = tempI64[0],HEAP32[(((buf)+(92))>>2)] = tempI64[1]);
+        HEAPU32[(((buf)+(96))>>2)] = 0;
+        (tempI64 = [stat.ino>>>0,(tempDouble=stat.ino,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(104))>>2)] = tempI64[0],HEAP32[(((buf)+(108))>>2)] = tempI64[1]);
+        return 0;
+      },doMsync:function(addr, stream, len, flags, offset) {
+        if (!FS.isFile(stream.node.mode)) {
+          throw new FS.ErrnoError(43);
+        }
+        if (flags & 2) {
+          // MAP_PRIVATE calls need not to be synced back to underlying fs
+          return 0;
+        }
+        var buffer = HEAPU8.slice(addr, addr + len);
+        FS.msync(stream, buffer, offset, len, flags);
+      },varargs:undefined,get:function() {
+        assert(SYSCALLS.varargs != undefined);
+        SYSCALLS.varargs += 4;
+        var ret = HEAP32[(((SYSCALLS.varargs)-(4))>>2)];
+        return ret;
+      },getStr:function(ptr) {
+        var ret = UTF8ToString(ptr);
+        return ret;
+      },getStreamFromFD:function(fd) {
+        var stream = FS.getStream(fd);
+        if (!stream) throw new FS.ErrnoError(8);
+        return stream;
+      }};
+  function ___syscall_chdir(path) {
+  try {
+  
+      path = SYSCALLS.getStr(path);
+      FS.chdir(path);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_chmod(path, mode) {
+  try {
+  
+      path = SYSCALLS.getStr(path);
+      FS.chmod(path, mode);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_close(fd) {
+  try {
+  
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let buf_size = 16;
+  	
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 15; // CLOSE
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    // fd
+  	    buf2[12] = fd & 0xff;
+  	    buf2[13] = (fd >> 8) & 0xff;
+  	    buf2[14] = (fd >> 16) & 0xff;
+  	    buf2[15] = (fd >> 24) & 0xff;
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (15|0x80)) {
+  
+  		    //console.log(messageEvent);
+  
+  		    wakeUp(0); // TODO
+  
+  		    return 0;
+  		}
+  
+  		return -1;
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  
+  	    bc.postMessage(msg);
+  
+  	});
+  	
+  	return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   var SOCKFS = {mount:function(mount) {
         // If Module['websocket'] has already been defined (e.g. for configuring
         // the subprotocol/url) use that, if not initialise it to a new object.
@@ -3800,44 +3956,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
         };
   
         // If debug is enabled register simple default logging callbacks for each Event.
-  
-  	console.log("$$$$$$ Init BroadcastChannel $$$$$$$$$");
-  
-  	/* Modified by Benoit Baudaux 13/1/2023 */
-  
-  	Module['fd_table'] = {};
-  	Module['fd_table'].last_fd = 2;
-  
-  	Module['bc_channels'] = {};
-  	Module['get_broadcast_channel'] = (name) => {
-  
-  	    if (name in Module['bc_channels']) {
-  		return Module['bc_channels'][name];
-  	    }
-  	    else {
-  
-  		Module['bc_channels'][name] = new BroadcastChannel(name);
-  		return Module['bc_channels'][name];
-  	    }
-  	};
-  
-  	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
-  
-  	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
-  
-  	    if (Module['rcv_bc_channel'].handler) {
-  
-  		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
-  		    return;
-  	    }
-  	};
-  
-  	Module['rcv_bc_channel'].set_handler = (handler) => {
-  
-  	    Module['rcv_bc_channel'].handler = handler;
-  	};
-  
-  	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+  	
   
         return FS.createNode(null, '/', 16384 | 511 /* 0777 */, 0);
       },createSocket:function(family, type, protocol) {
@@ -4828,94 +4947,66 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   	  info.addr = DNS.lookup_addr(info.addr) || info.addr;
       return info;
     }
+  function ___syscall_connect(fd, addr, addrlen) {
+  try {
   
-  var SYSCALLS = {DEFAULT_POLLMASK:5,calculateAt:function(dirfd, path, allowEmpty) {
-        if (PATH.isAbs(path)) {
-          return path;
-        }
-        // relative path
-        var dir;
-        if (dirfd === -100) {
-          dir = FS.cwd();
-        } else {
-          var dirstream = SYSCALLS.getStreamFromFD(dirfd);
-          dir = dirstream.path;
-        }
-        if (path.length == 0) {
-          if (!allowEmpty) {
-            throw new FS.ErrnoError(44);;
-          }
-          return dir;
-        }
-        return PATH.join2(dir, path);
-      },doStat:function(func, path, buf) {
-        try {
-          var stat = func(path);
-        } catch (e) {
-          if (e && e.node && PATH.normalize(path) !== PATH.normalize(FS.getPath(e.node))) {
-            // an error occurred while trying to look up the path; we should just report ENOTDIR
-            return -54;
-          }
-          throw e;
-        }
-        HEAP32[((buf)>>2)] = stat.dev;
-        HEAP32[(((buf)+(8))>>2)] = stat.ino;
-        HEAP32[(((buf)+(12))>>2)] = stat.mode;
-        HEAPU32[(((buf)+(16))>>2)] = stat.nlink;
-        HEAP32[(((buf)+(20))>>2)] = stat.uid;
-        HEAP32[(((buf)+(24))>>2)] = stat.gid;
-        HEAP32[(((buf)+(28))>>2)] = stat.rdev;
-        (tempI64 = [stat.size>>>0,(tempDouble=stat.size,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(40))>>2)] = tempI64[0],HEAP32[(((buf)+(44))>>2)] = tempI64[1]);
-        HEAP32[(((buf)+(48))>>2)] = 4096;
-        HEAP32[(((buf)+(52))>>2)] = stat.blocks;
-        (tempI64 = [Math.floor(stat.atime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.atime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(56))>>2)] = tempI64[0],HEAP32[(((buf)+(60))>>2)] = tempI64[1]);
-        HEAPU32[(((buf)+(64))>>2)] = 0;
-        (tempI64 = [Math.floor(stat.mtime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.mtime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(72))>>2)] = tempI64[0],HEAP32[(((buf)+(76))>>2)] = tempI64[1]);
-        HEAPU32[(((buf)+(80))>>2)] = 0;
-        (tempI64 = [Math.floor(stat.ctime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.ctime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(88))>>2)] = tempI64[0],HEAP32[(((buf)+(92))>>2)] = tempI64[1]);
-        HEAPU32[(((buf)+(96))>>2)] = 0;
-        (tempI64 = [stat.ino>>>0,(tempDouble=stat.ino,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(104))>>2)] = tempI64[0],HEAP32[(((buf)+(108))>>2)] = tempI64[1]);
-        return 0;
-      },doMsync:function(addr, stream, len, flags, offset) {
-        if (!FS.isFile(stream.node.mode)) {
-          throw new FS.ErrnoError(43);
-        }
-        if (flags & 2) {
-          // MAP_PRIVATE calls need not to be synced back to underlying fs
-          return 0;
-        }
-        var buffer = HEAPU8.slice(addr, addr + len);
-        FS.msync(stream, buffer, offset, len, flags);
-      },varargs:undefined,get:function() {
-        assert(SYSCALLS.varargs != undefined);
-        SYSCALLS.varargs += 4;
-        var ret = HEAP32[(((SYSCALLS.varargs)-(4))>>2)];
-        return ret;
-      },getStr:function(ptr) {
-        var ret = UTF8ToString(ptr);
-        return ret;
-      },getStreamFromFD:function(fd) {
-        var stream = FS.getStream(fd);
-        if (!stream) throw new FS.ErrnoError(8);
-        return stream;
-      }};
-  function ___syscall_bind(fd, addr, addrlen) {
+      var sock = getSocketFromFD(fd);
+      var info = getSocketAddress(addr, addrlen);
+      sock.sock_ops.connect(sock, info.addr, info.port);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_dup3(fd, suggestFD, flags) {
+  try {
+  
+      var old = SYSCALLS.getStreamFromFD(fd);
+      assert(!flags);
+      if (old.fd === suggestFD) return -28;
+      var suggest = FS.getStream(suggestFD);
+      if (suggest) FS.close(suggest);
+      return FS.createStream(old, suggestFD, suggestFD + 1).fd;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_execve(pathname, argv, envp) {
   try {
   
   
-  	var sock = getSocketFromFD(fd);
-  	var info = getSocketAddress(addr, addrlen);
+  	
   
+  	// Use Asyncify for not returning from execve
+  	
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
-  	    sock.wakeUp = wakeUp;
+  	    // Remove name property of window for process to be loaded fully with no fork mechanism
+  	    window.name = "";
   
-  	    /* Modified by Benoit Baudaux 26/12/2022 */
-  	    sock.sock_ops.bind(sock, info.addr, info.port);
-  	    /*return 0;*/
+  	    //TODO: use argv and envp
+  	    window.frameElement.src = SYSCALLS.getStr(pathname)+"/exa/exa.html";
   	});
-  	
-  	return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_fchownat(dirfd, path, owner, group, flags) {
+  try {
+  
+      path = SYSCALLS.getStr(path);
+      var nofollow = flags & 256;
+      flags = flags & (~256);
+      assert(flags === 0);
+      path = SYSCALLS.calculateAt(dirfd, path);
+      (nofollow ? FS.lchown : FS.chown)(path, owner, group);
+      return 0;
     } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
@@ -5059,61 +5150,426 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   }
   }
 
-  /** @param {number=} addrlen */
-  function writeSockaddr(sa, family, addr, port, addrlen) {
-      switch (family) {
-        case 2:
-          addr = inetPton4(addr);
-          zeroMemory(sa, 16);
-          if (addrlen) {
-            HEAP32[((addrlen)>>2)] = 16;
-          }
-          HEAP16[((sa)>>1)] = family;
-          HEAP32[(((sa)+(4))>>2)] = addr;
-          HEAP16[(((sa)+(2))>>1)] = _htons(port);
-          break;
-        case 10:
-          addr = inetPton6(addr);
-          zeroMemory(sa, 28);
-          if (addrlen) {
-            HEAP32[((addrlen)>>2)] = 28;
-          }
-          HEAP32[((sa)>>2)] = family;
-          HEAP32[(((sa)+(8))>>2)] = addr[0];
-          HEAP32[(((sa)+(12))>>2)] = addr[1];
-          HEAP32[(((sa)+(16))>>2)] = addr[2];
-          HEAP32[(((sa)+(20))>>2)] = addr[3];
-          HEAP16[(((sa)+(2))>>1)] = _htons(port);
-          break;
-        default:
-          return 5;
-      }
-      return 0;
-    }
-  function ___syscall_recvfrom(fd, buf, len, flags, addr, addrlen) {
+  function ___syscall_ioctl(fd, op, varargs) {
+  SYSCALLS.varargs = varargs;
   try {
   
-  	/* Modified by Benoit Baudaux 26/12/2022 */
-      var sock = getSocketFromFD(fd);
-      /*var msg = sock.sock_ops.recvmsg(sock, len);
-      if (!msg) return 0; // socket is closed
-      if (addr) {
-        var errno = writeSockaddr(addr, sock.family, DNS.lookup_name(msg.addr), msg.port, addrlen);
-        assert(!errno);
-      }
-      HEAPU8.set(msg.buffer, buf);
+  	/*
+      var stream = SYSCALLS.getStreamFromFD(fd);
   
-      return msg.buffer.byteLength;*/
+      var ret = Asyncify.handleSleep(function(wakeUp) {
+  
+        stream.asynsify_wakeup = wakeUp;
+        stream.asynsify_wakeup_consumed = false;
+  
+        function _ioctl() {
+  
+          switch (op) {
+            case 21509: {
+              return 0;
+            }
+            case 21505: {
+              if (!stream.tty) return -59;
+              // Modified be Benoit Baudaux 9/11/2022
+              //return 0;
+  
+              var argp = SYSCALLS.get();
+              return FS.ioctl(stream, op, argp);
+            }
+            case 21510:
+            case 21511:
+            case 21512: {
+              if (!stream.tty) return -59;
+  
+              return 0; // no-op, not actually adjusting terminal settings
+            }
+            case 21506:
+            case 21507:
+            case 21508: {
+              if (!stream.tty) return -59;
+  
+              // Modified be Benoit Baudaux 9/11/2022
+              //return 0; // no-op, not actually adjusting terminal settings
+  
+              var argp = SYSCALLS.get();
+              return FS.ioctl(stream, op, argp);
+            }
+            case 21519: {
+              if (!stream.tty) return -59;
+              var argp = SYSCALLS.get();
+              HEAP32[((argp)>>2)] = 0;
+              return 0;
+            }
+            case 21520: {
+              if (!stream.tty) return -59;
+              return -28; // not supported
+            }
+            case 21531: {
+              var argp = SYSCALLS.get();
+              return FS.ioctl(stream, op, argp);
+            }
+            case 21523: {
+              // TODO: in theory we should write to the winsize struct that gets
+              // passed in, but for now musl doesn't read anything on it
+              if (!stream.tty) return -59;
+  
+              // Modified be Benoit Baudaux 10/11/2022
+              //return 0;
+  
+              var argp = SYSCALLS.get();
+              return FS.ioctl(stream, op, argp);
+            }
+            case 21524: {
+              // TODO: technically, this ioctl call should change the window size.
+              // but, since emscripten doesn't have any concept of a terminal window
+              // yet, we'll just silently throw it away as we do TIOCGWINSZ
+              if (!stream.tty) return -59;
+              return 0;
+            }
+            default: return -28; // not supported
+          }
+        }
+  
+        var r = _ioctl();
+  
+        if (!stream.asynsify_wakeup_consumed)
+          wakeUp(r);
+  
+        //return 0;
+        });*/
+  	
+  	console.log("__syscall_ioctl: op="+op);
+  
+  	/* ops 21505 (TCGETS), 21506 (TCSETS), 21515 (TCFLSH), 21523 (TIOCGWINSZ) */
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  	
+  	    let buf_size = 256;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 14; // IOCTL
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    // op
+  	    buf2[16] = op & 0xff;
+  	    buf2[17] = (op >> 8) & 0xff;
+  	    buf2[18] = (op >> 16) & 0xff;
+  	    buf2[19] = (op >> 24) & 0xff;
+  	    
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (14|0x80)) {
+  		
+  		    wakeUp(0); // TODO: size
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});
+  
+      return ret;
+  
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_openat(dirfd, path, flags, varargs) {
+  SYSCALLS.varargs = varargs;
+  try {
+  
+  
+  	/* Modified by Benoit Baudaux 4/1/2023 */
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
-  	    sock.wakeUp = wakeUp;
+  	    if (window.frameElement.getAttribute('pid') != "1") {
   
-  	    sock.sock_ops.recvfrom(sock, buf, len, flags, addr, addrlen);
+  		var mode = varargs ? SYSCALLS.get() : 0;
+  
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  		
+  		let buf = Module._malloc(1256);
+  
+  		Module.HEAPU8[buf] = 11; // OPEN
+  
+  		/*//padding
+  		  buf[1] = 0;
+  		  buf[2] = 0;
+  		  buf[3] = 0;*/
+  
+  		let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  		// pid
+  		Module.HEAPU8[buf+4] = pid & 0xff;
+  		Module.HEAPU8[buf+5] = (pid >> 8) & 0xff;
+  		Module.HEAPU8[buf+6] = (pid >> 16) & 0xff;
+  		Module.HEAPU8[buf+7] = (pid >> 24) & 0xff;
+  
+  		// errno
+  		Module.HEAPU8[buf+8] = 0x0;
+  		Module.HEAPU8[buf+9] = 0x0;
+  		Module.HEAPU8[buf+10] = 0x0;
+  		Module.HEAPU8[buf+11] = 0x0;
+  
+  		// fd
+  		Module.HEAPU8[buf+12] = 0x0;
+  		Module.HEAPU8[buf+13] = 0x0;
+  		Module.HEAPU8[buf+14] = 0x0;
+  		Module.HEAPU8[buf+15] = 0x0;
+  
+  		// remote fd
+  
+  		Module.HEAPU8[buf+16] = 0x0;
+  		Module.HEAPU8[buf+17] = 0x0;
+  		Module.HEAPU8[buf+18] = 0x0;
+  		Module.HEAPU8[buf+19] = 0x0;
+  
+  		// flags
+  		Module.HEAPU8[buf+20] = flags & 0xff;
+  		Module.HEAPU8[buf+21] = (flags >> 8) & 0xff;
+  		Module.HEAPU8[buf+22] = (flags >> 16) & 0xff;
+  		Module.HEAPU8[buf+23] = (flags >> 24) & 0xff;
+  
+  		// mode
+  		// TODO
+  
+  		// pathname
+  		stringToUTF8(UTF8ToString(path), buf+140, 1024);
+  
+  		let buf2 = Module.HEAPU8.slice(buf, buf+1256);
+  		
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		    Module['rcv_bc_channel'].set_handler(null);
+  		    
+  		    console.log(messageEvent);
+  
+  		    let msg2 = messageEvent.data;
+  		    
+  		    /*if (first_response) { // first response comes from resmgr
+  
+  			first_response = false;
+  
+  			msg2.buf[0] = 11;
+  
+  			msg2.from = open_name;
+  
+  			let peer = UTF8ArrayToString(msg2.buf, 26, 108);
+  
+  			console.log("forward to "+peer);
+  			
+  			let open_driver_bc = new BroadcastChannel(peer);
+  
+  			open_driver_bc.postMessage(msg2);
+  		    }
+  		    else {*/
+  
+  		    if (msg2.buf[0] == (11|0x80)) {
+  
+  			let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
+  
+  			    if (_errno == 0) {
+  
+  				let fd = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  				let remote_fd = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  				let flags = msg2.buf[20] | (msg2.buf[21] << 8) | (msg2.buf[22] << 16) |  (msg2.buf[23] << 24);
+  				let mode = msg2.buf[24] | (msg2.buf[25] << 8);
+  				let type = msg2.buf[26];
+  				let major = msg2.buf[28] | (msg2.buf[29] << 8);
+  				let minor = msg2.buf[30] | (msg2.buf[31] << 8);
+  				let peer = UTF8ArrayToString(msg2.buf, 32, 108);
+  
+  				
+  
+  				// create our internal socket structure
+  				var desc = {
+  
+  				    fd: fd,
+  				    remote_fd: remote_fd,
+  				    flags: flags,
+  				    mode: mode,
+  				    peer: peer,
+  				    type: type,
+  				    major: major,
+  				    minor: minor,
+  				    
+  				    error: null, // Used in getsockopt for SOL_SOCKET/SO_ERROR test
+  				    peers: {},
+  				    pending: [],
+  				    recv_queue: [],
+  				    name: null,
+  				    bc: null,
+  				};
+  
+  				Module['fd_table'][fd] = desc;
+  
+  				//console.log(Module['fd_table']);
+  
+  				wakeUp(fd);
+  			    }
+  			    else {
+  
+  				wakeUp(-1);
+  			    }
+  
+  			return 0;
+  		    }
+  
+  		    return -1;
+  		});
+  
+  		let msg = {
+  
+  		    from: Module['rcv_bc_channel'].name,
+  		    buf: buf2,
+  		    len: 1256
+  		};
+  		
+  		bc.postMessage(msg);
+  
+  		Module._free(buf);
+  	    }
   	});
-  	
+  
   	return ret;
-    } catch (e) {
+  	
+  	
+      /*path = SYSCALLS.getStr(path);
+      path = SYSCALLS.calculateAt(dirfd, path);
+      var mode = varargs ? SYSCALLS.get() : 0;
+      return FS.open(path, flags, mode).fd;*/
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_read(fd, buf, count) {
+  try {
+  
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let len = count;
+  	
+  	    let buf_size = 20;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 12; // READ
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    console.log("read: remote_fd="+remote_fd);
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    // len
+  	    buf2[16] = len & 0xff;
+  	    buf2[17] = (len >> 8) & 0xff;
+  	    buf2[18] = (len >> 16) & 0xff;
+  	    buf2[19] = (len >> 24) & 0xff;
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (12|0x80)) {
+  
+  		    let bytes_read = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  
+  		    console.log("bytes_read: "+bytes_read);
+  
+  		    Module.HEAPU8.set(msg2.buf.slice(20, 20+bytes_read), buf);
+  		    
+  		    wakeUp(bytes_read);
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  		
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});
+      
+      return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_readv(fd, iov, iovcnt) {
+  try {
+  
+  
+  	console.log("__syscall_readv: TODO");
+  	return 0;
+      } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
   }
@@ -5305,37 +5761,287 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   }
   }
 
-  var readAsmConstArgsArray = [];
-  function readAsmConstArgs(sigPtr, buf) {
-      // Nobody should have mutated _readAsmConstArgsArray underneath us to be something else than an array.
-      assert(Array.isArray(readAsmConstArgsArray));
-      // The input buffer is allocated on the stack, so it must be stack-aligned.
-      assert(buf % 16 == 0);
-      readAsmConstArgsArray.length = 0;
-      var ch;
-      // Most arguments are i32s, so shift the buffer pointer so it is a plain
-      // index into HEAP32.
-      buf >>= 2;
-      while (ch = HEAPU8[sigPtr++]) {
-        var chr = String.fromCharCode(ch);
-        var validChars = ['d', 'f', 'i'];
-        assert(validChars.includes(chr), 'Invalid character ' + ch + '("' + chr + '") in readAsmConstArgs! Use only [' + validChars + '], and do not specify "v" for void return argument.');
-        // Floats are always passed as doubles, and doubles and int64s take up 8
-        // bytes (two 32-bit slots) in memory, align reads to these:
-        buf += (ch != 105/*i*/) & buf;
-        readAsmConstArgsArray.push(
-          ch == 105/*i*/ ? HEAP32[buf] :
-         HEAPF64[buf++ >> 1]
-        );
-        ++buf;
+  function ___syscall_write(fd, buf, count) {
+  try {
+  
+  	
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  	
+  	    let len = count;
+  
+  	    let buf_size = 20+len;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 13; // WRITE
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    // len
+  	    buf2[16] = len & 0xff;
+  	    buf2[17] = (len >> 8) & 0xff;
+  	    buf2[18] = (len >> 16) & 0xff;
+  	    buf2[19] = (len >> 24) & 0xff;
+  
+  	    buf2.set(HEAPU8.slice(buf,buf+len),20);
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (13|0x80)) {
+  		
+  		    let bytes_written = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  		
+  		    wakeUp(bytes_written);
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});
+      
+      return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_writev(fd, iov, iovcnt) {
+  try {
+  
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  	
+  	    let len = 0;
+  
+  	    let iov2 = iov;
+  
+  	    for (var i = 0; i < iovcnt; i++) {
+  		len += HEAPU32[(((iov2)+(4))>>2)];
+  		iov2 += 8;
+  	    }
+  
+  	    let buf_size = 20+len;
+  
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 13; // WRITE
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
+  
+  	    // remote_fd
+  	    buf2[12] = remote_fd & 0xff;
+  	    buf2[13] = (remote_fd >> 8) & 0xff;
+  	    buf2[14] = (remote_fd >> 16) & 0xff;
+  	    buf2[15] = (remote_fd >> 24) & 0xff;
+  
+  	    // len
+  	    buf2[16] = len & 0xff;
+  	    buf2[17] = (len >> 8) & 0xff;
+  	    buf2[18] = (len >> 16) & 0xff;
+  	    buf2[19] = (len >> 24) & 0xff;
+  
+  	    buf_size = 20;
+  
+  	    iov2 = iov;
+  
+  	    for (var i = 0; i < iovcnt; i++) {
+  		let ptr = HEAPU32[((iov2)>>2)];
+  		let l = HEAPU32[(((iov2)+(4))>>2)];
+  		
+  		if (l > 0)
+  		    buf2.set(HEAPU8.slice(ptr,ptr+l), buf_size);
+  		
+  		buf_size += l;
+  		
+  		iov2 += 8;
+  	    }
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (13|0x80)) {
+  
+  		    let bytes_written = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  		
+  		    wakeUp(bytes_written);
+  
+  		    return 0;
+  		}
+  		else {
+  
+  		    return -1;
+  		}
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let driver_bc = Module.get_broadcast_channel(Module['fd_table'][fd].peer);
+  	    
+  	    driver_bc.postMessage(msg);
+  	});
+      
+      return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  var nowIsMonotonic = true;;
+  function __emscripten_get_now_is_monotonic() {
+      return nowIsMonotonic;
+    }
+
+  function readI53FromI64(ptr) {
+      return HEAPU32[ptr>>2] + HEAP32[ptr+4>>2] * 4294967296;
+    }
+  function __gmtime_js(time, tmPtr) {
+      var date = new Date(readI53FromI64(time)*1000);
+      HEAP32[((tmPtr)>>2)] = date.getUTCSeconds();
+      HEAP32[(((tmPtr)+(4))>>2)] = date.getUTCMinutes();
+      HEAP32[(((tmPtr)+(8))>>2)] = date.getUTCHours();
+      HEAP32[(((tmPtr)+(12))>>2)] = date.getUTCDate();
+      HEAP32[(((tmPtr)+(16))>>2)] = date.getUTCMonth();
+      HEAP32[(((tmPtr)+(20))>>2)] = date.getUTCFullYear()-1900;
+      HEAP32[(((tmPtr)+(24))>>2)] = date.getUTCDay();
+      var start = Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0);
+      var yday = ((date.getTime() - start) / (1000 * 60 * 60 * 24))|0;
+      HEAP32[(((tmPtr)+(28))>>2)] = yday;
+    }
+
+  function __localtime_js(time, tmPtr) {
+      var date = new Date(readI53FromI64(time)*1000);
+      HEAP32[((tmPtr)>>2)] = date.getSeconds();
+      HEAP32[(((tmPtr)+(4))>>2)] = date.getMinutes();
+      HEAP32[(((tmPtr)+(8))>>2)] = date.getHours();
+      HEAP32[(((tmPtr)+(12))>>2)] = date.getDate();
+      HEAP32[(((tmPtr)+(16))>>2)] = date.getMonth();
+      HEAP32[(((tmPtr)+(20))>>2)] = date.getFullYear()-1900;
+      HEAP32[(((tmPtr)+(24))>>2)] = date.getDay();
+  
+      var start = new Date(date.getFullYear(), 0, 1);
+      var yday = ((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))|0;
+      HEAP32[(((tmPtr)+(28))>>2)] = yday;
+      HEAP32[(((tmPtr)+(36))>>2)] = -(date.getTimezoneOffset() * 60);
+  
+      // Attention: DST is in December in South, and some regions don't have DST at all.
+      var summerOffset = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
+      var winterOffset = start.getTimezoneOffset();
+      var dst = (summerOffset != winterOffset && date.getTimezoneOffset() == Math.min(winterOffset, summerOffset))|0;
+      HEAP32[(((tmPtr)+(32))>>2)] = dst;
+    }
+
+  function allocateUTF8(str) {
+      var size = lengthBytesUTF8(str) + 1;
+      var ret = _malloc(size);
+      if (ret) stringToUTF8Array(str, HEAP8, ret, size);
+      return ret;
+    }
+  function _tzset_impl(timezone, daylight, tzname) {
+      var currentYear = new Date().getFullYear();
+      var winter = new Date(currentYear, 0, 1);
+      var summer = new Date(currentYear, 6, 1);
+      var winterOffset = winter.getTimezoneOffset();
+      var summerOffset = summer.getTimezoneOffset();
+  
+      // Local standard timezone offset. Local standard time is not adjusted for daylight savings.
+      // This code uses the fact that getTimezoneOffset returns a greater value during Standard Time versus Daylight Saving Time (DST).
+      // Thus it determines the expected output during Standard Time, and it compares whether the output of the given date the same (Standard) or less (DST).
+      var stdTimezoneOffset = Math.max(winterOffset, summerOffset);
+  
+      // timezone is specified as seconds west of UTC ("The external variable
+      // `timezone` shall be set to the difference, in seconds, between
+      // Coordinated Universal Time (UTC) and local standard time."), the same
+      // as returned by stdTimezoneOffset.
+      // See http://pubs.opengroup.org/onlinepubs/009695399/functions/tzset.html
+      HEAP32[((timezone)>>2)] = stdTimezoneOffset * 60;
+  
+      HEAP32[((daylight)>>2)] = Number(winterOffset != summerOffset);
+  
+      function extractZone(date) {
+        var match = date.toTimeString().match(/\(([A-Za-z ]+)\)$/);
+        return match ? match[1] : "GMT";
+      };
+      var winterName = extractZone(winter);
+      var summerName = extractZone(summer);
+      var winterNamePtr = allocateUTF8(winterName);
+      var summerNamePtr = allocateUTF8(summerName);
+      if (summerOffset < winterOffset) {
+        // Northern hemisphere
+        HEAPU32[((tzname)>>2)] = winterNamePtr;
+        HEAPU32[(((tzname)+(4))>>2)] = summerNamePtr;
+      } else {
+        HEAPU32[((tzname)>>2)] = summerNamePtr;
+        HEAPU32[(((tzname)+(4))>>2)] = winterNamePtr;
       }
-      return readAsmConstArgsArray;
     }
-  function _emscripten_asm_const_int(code, sigPtr, argbuf) {
-      var args = readAsmConstArgs(sigPtr, argbuf);
-      if (!ASM_CONSTS.hasOwnProperty(code)) abort('No EM_ASM constant found at address ' + code);
-      return ASM_CONSTS[code].apply(null, args);
+  function __tzset_js(timezone, daylight, tzname) {
+      // TODO: Use (malleable) environment variables instead of system settings.
+      if (__tzset_js.called) return;
+      __tzset_js.called = true;
+      _tzset_impl(timezone, daylight, tzname);
     }
+
+  function _emscripten_date_now() {
+      return Date.now();
+    }
+
+  var _emscripten_get_now;if (ENVIRONMENT_IS_NODE) {
+    _emscripten_get_now = () => {
+      var t = process['hrtime']();
+      return t[0] * 1e3 + t[1] / 1e6;
+    };
+  } else _emscripten_get_now = () => performance.now();
+  ;
 
   function reallyNegative(x) {
       return x < 0 || (x === 0 && (1/x) === -Infinity);
@@ -5997,6 +6703,73 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
       abortOnCannotGrowMemory(requestedSize);
     }
 
+  var ENV = {};
+  
+  function getExecutableName() {
+      return thisProgram || './this.program';
+    }
+  function getEnvStrings() {
+      if (!getEnvStrings.strings) {
+        // Default values.
+        // Browser language detection #8751
+        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
+        var env = {
+          'USER': 'web_user',
+          'LOGNAME': 'web_user',
+          'PATH': '/',
+          'PWD': '/',
+          'HOME': '/home/web_user',
+          'LANG': lang,
+          '_': getExecutableName()
+        };
+        // Apply the user-provided values, if any.
+        for (var x in ENV) {
+          // x is a key in ENV; if ENV[x] is undefined, that means it was
+          // explicitly set to be so. We allow user code to do that to
+          // force variables with default values to remain unset.
+          if (ENV[x] === undefined) delete env[x];
+          else env[x] = ENV[x];
+        }
+        var strings = [];
+        for (var x in env) {
+          strings.push(x + '=' + env[x]);
+        }
+        getEnvStrings.strings = strings;
+      }
+      return getEnvStrings.strings;
+    }
+  
+  /** @param {boolean=} dontAddNull */
+  function writeAsciiToMemory(str, buffer, dontAddNull) {
+      for (var i = 0; i < str.length; ++i) {
+        assert(str.charCodeAt(i) === (str.charCodeAt(i) & 0xff));
+        HEAP8[((buffer++)>>0)] = str.charCodeAt(i);
+      }
+      // Null-terminate the pointer to the HEAP.
+      if (!dontAddNull) HEAP8[((buffer)>>0)] = 0;
+    }
+  function _environ_get(__environ, environ_buf) {
+      var bufSize = 0;
+      getEnvStrings().forEach(function(string, i) {
+        var ptr = environ_buf + bufSize;
+        HEAPU32[(((__environ)+(i*4))>>2)] = ptr;
+        writeAsciiToMemory(string, ptr);
+        bufSize += string.length + 1;
+      });
+      return 0;
+    }
+
+  function _environ_sizes_get(penviron_count, penviron_buf_size) {
+      var strings = getEnvStrings();
+      HEAPU32[((penviron_count)>>2)] = strings.length;
+      var bufSize = 0;
+      strings.forEach(function(string) {
+        bufSize += string.length + 1;
+      });
+      HEAPU32[((penviron_buf_size)>>2)] = bufSize;
+      return 0;
+    }
+
   function _proc_exit(code) {
       EXITSTATUS = code;
       if (!keepRuntimeAlive()) {
@@ -6019,6 +6792,393 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   
       _proc_exit(status);
     }
+  var _exit = exitJS;
+
+  function _fd_close(fd) {
+  try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      FS.close(stream);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return e.errno;
+  }
+  }
+
+  function _fd_fdstat_get(fd, pbuf) {
+  try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      // All character devices are terminals (other things a Linux system would
+      // assume is a character device, like the mouse, we have special APIs for).
+      var type = stream.tty ? 2 :
+                 FS.isDir(stream.mode) ? 3 :
+                 FS.isLink(stream.mode) ? 7 :
+                 4;
+      HEAP8[((pbuf)>>0)] = type;
+      // TODO HEAP16[(((pbuf)+(2))>>1)] = ?;
+      // TODO (tempI64 = [?>>>0,(tempDouble=?,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((pbuf)+(8))>>2)] = tempI64[0],HEAP32[(((pbuf)+(12))>>2)] = tempI64[1]);
+      // TODO (tempI64 = [?>>>0,(tempDouble=?,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((pbuf)+(16))>>2)] = tempI64[0],HEAP32[(((pbuf)+(20))>>2)] = tempI64[1]);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return e.errno;
+  }
+  }
+
+  function convertI32PairToI53Checked(lo, hi) {
+      assert(lo == (lo >>> 0) || lo == (lo|0)); // lo should either be a i32 or a u32
+      assert(hi === (hi|0));                    // hi should be a i32
+      return ((hi + 0x200000) >>> 0 < 0x400001 - !!lo) ? (lo >>> 0) + hi * 4294967296 : NaN;
+    }
+  function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
+  try {
+  
+      var offset = convertI32PairToI53Checked(offset_low, offset_high); if (isNaN(offset)) return 61;
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      FS.llseek(stream, offset, whence);
+      (tempI64 = [stream.position>>>0,(tempDouble=stream.position,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[((newOffset)>>2)] = tempI64[0],HEAP32[(((newOffset)+(4))>>2)] = tempI64[1]);
+      if (stream.getdents && offset === 0 && whence === 0) stream.getdents = null; // reset readdir state
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return e.errno;
+  }
+  }
+
+  function __isLeapYear(year) {
+        return year%4 === 0 && (year%100 !== 0 || year%400 === 0);
+    }
+  
+  function __arraySum(array, index) {
+      var sum = 0;
+      for (var i = 0; i <= index; sum += array[i++]) {
+        // no-op
+      }
+      return sum;
+    }
+  
+  var __MONTH_DAYS_LEAP = [31,29,31,30,31,30,31,31,30,31,30,31];
+  
+  var __MONTH_DAYS_REGULAR = [31,28,31,30,31,30,31,31,30,31,30,31];
+  function __addDays(date, days) {
+      var newDate = new Date(date.getTime());
+      while (days > 0) {
+        var leap = __isLeapYear(newDate.getFullYear());
+        var currentMonth = newDate.getMonth();
+        var daysInCurrentMonth = (leap ? __MONTH_DAYS_LEAP : __MONTH_DAYS_REGULAR)[currentMonth];
+  
+        if (days > daysInCurrentMonth-newDate.getDate()) {
+          // we spill over to next month
+          days -= (daysInCurrentMonth-newDate.getDate()+1);
+          newDate.setDate(1);
+          if (currentMonth < 11) {
+            newDate.setMonth(currentMonth+1)
+          } else {
+            newDate.setMonth(0);
+            newDate.setFullYear(newDate.getFullYear()+1);
+          }
+        } else {
+          // we stay in current month
+          newDate.setDate(newDate.getDate()+days);
+          return newDate;
+        }
+      }
+  
+      return newDate;
+    }
+  
+  function writeArrayToMemory(array, buffer) {
+      assert(array.length >= 0, 'writeArrayToMemory array must have a length (should be an array or typed array)')
+      HEAP8.set(array, buffer);
+    }
+  function _strftime(s, maxsize, format, tm) {
+      // size_t strftime(char *restrict s, size_t maxsize, const char *restrict format, const struct tm *restrict timeptr);
+      // http://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html
+  
+      var tm_zone = HEAP32[(((tm)+(40))>>2)];
+  
+      var date = {
+        tm_sec: HEAP32[((tm)>>2)],
+        tm_min: HEAP32[(((tm)+(4))>>2)],
+        tm_hour: HEAP32[(((tm)+(8))>>2)],
+        tm_mday: HEAP32[(((tm)+(12))>>2)],
+        tm_mon: HEAP32[(((tm)+(16))>>2)],
+        tm_year: HEAP32[(((tm)+(20))>>2)],
+        tm_wday: HEAP32[(((tm)+(24))>>2)],
+        tm_yday: HEAP32[(((tm)+(28))>>2)],
+        tm_isdst: HEAP32[(((tm)+(32))>>2)],
+        tm_gmtoff: HEAP32[(((tm)+(36))>>2)],
+        tm_zone: tm_zone ? UTF8ToString(tm_zone) : ''
+      };
+  
+      var pattern = UTF8ToString(format);
+  
+      // expand format
+      var EXPANSION_RULES_1 = {
+        '%c': '%a %b %d %H:%M:%S %Y',     // Replaced by the locale's appropriate date and time representation - e.g., Mon Aug  3 14:02:01 2013
+        '%D': '%m/%d/%y',                 // Equivalent to %m / %d / %y
+        '%F': '%Y-%m-%d',                 // Equivalent to %Y - %m - %d
+        '%h': '%b',                       // Equivalent to %b
+        '%r': '%I:%M:%S %p',              // Replaced by the time in a.m. and p.m. notation
+        '%R': '%H:%M',                    // Replaced by the time in 24-hour notation
+        '%T': '%H:%M:%S',                 // Replaced by the time
+        '%x': '%m/%d/%y',                 // Replaced by the locale's appropriate date representation
+        '%X': '%H:%M:%S',                 // Replaced by the locale's appropriate time representation
+        // Modified Conversion Specifiers
+        '%Ec': '%c',                      // Replaced by the locale's alternative appropriate date and time representation.
+        '%EC': '%C',                      // Replaced by the name of the base year (period) in the locale's alternative representation.
+        '%Ex': '%m/%d/%y',                // Replaced by the locale's alternative date representation.
+        '%EX': '%H:%M:%S',                // Replaced by the locale's alternative time representation.
+        '%Ey': '%y',                      // Replaced by the offset from %EC (year only) in the locale's alternative representation.
+        '%EY': '%Y',                      // Replaced by the full alternative year representation.
+        '%Od': '%d',                      // Replaced by the day of the month, using the locale's alternative numeric symbols, filled as needed with leading zeros if there is any alternative symbol for zero; otherwise, with leading <space> characters.
+        '%Oe': '%e',                      // Replaced by the day of the month, using the locale's alternative numeric symbols, filled as needed with leading <space> characters.
+        '%OH': '%H',                      // Replaced by the hour (24-hour clock) using the locale's alternative numeric symbols.
+        '%OI': '%I',                      // Replaced by the hour (12-hour clock) using the locale's alternative numeric symbols.
+        '%Om': '%m',                      // Replaced by the month using the locale's alternative numeric symbols.
+        '%OM': '%M',                      // Replaced by the minutes using the locale's alternative numeric symbols.
+        '%OS': '%S',                      // Replaced by the seconds using the locale's alternative numeric symbols.
+        '%Ou': '%u',                      // Replaced by the weekday as a number in the locale's alternative representation (Monday=1).
+        '%OU': '%U',                      // Replaced by the week number of the year (Sunday as the first day of the week, rules corresponding to %U ) using the locale's alternative numeric symbols.
+        '%OV': '%V',                      // Replaced by the week number of the year (Monday as the first day of the week, rules corresponding to %V ) using the locale's alternative numeric symbols.
+        '%Ow': '%w',                      // Replaced by the number of the weekday (Sunday=0) using the locale's alternative numeric symbols.
+        '%OW': '%W',                      // Replaced by the week number of the year (Monday as the first day of the week) using the locale's alternative numeric symbols.
+        '%Oy': '%y',                      // Replaced by the year (offset from %C ) using the locale's alternative numeric symbols.
+      };
+      for (var rule in EXPANSION_RULES_1) {
+        pattern = pattern.replace(new RegExp(rule, 'g'), EXPANSION_RULES_1[rule]);
+      }
+  
+      var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+      function leadingSomething(value, digits, character) {
+        var str = typeof value == 'number' ? value.toString() : (value || '');
+        while (str.length < digits) {
+          str = character[0]+str;
+        }
+        return str;
+      }
+  
+      function leadingNulls(value, digits) {
+        return leadingSomething(value, digits, '0');
+      }
+  
+      function compareByDay(date1, date2) {
+        function sgn(value) {
+          return value < 0 ? -1 : (value > 0 ? 1 : 0);
+        }
+  
+        var compare;
+        if ((compare = sgn(date1.getFullYear()-date2.getFullYear())) === 0) {
+          if ((compare = sgn(date1.getMonth()-date2.getMonth())) === 0) {
+            compare = sgn(date1.getDate()-date2.getDate());
+          }
+        }
+        return compare;
+      }
+  
+      function getFirstWeekStartDate(janFourth) {
+          switch (janFourth.getDay()) {
+            case 0: // Sunday
+              return new Date(janFourth.getFullYear()-1, 11, 29);
+            case 1: // Monday
+              return janFourth;
+            case 2: // Tuesday
+              return new Date(janFourth.getFullYear(), 0, 3);
+            case 3: // Wednesday
+              return new Date(janFourth.getFullYear(), 0, 2);
+            case 4: // Thursday
+              return new Date(janFourth.getFullYear(), 0, 1);
+            case 5: // Friday
+              return new Date(janFourth.getFullYear()-1, 11, 31);
+            case 6: // Saturday
+              return new Date(janFourth.getFullYear()-1, 11, 30);
+          }
+      }
+  
+      function getWeekBasedYear(date) {
+          var thisDate = __addDays(new Date(date.tm_year+1900, 0, 1), date.tm_yday);
+  
+          var janFourthThisYear = new Date(thisDate.getFullYear(), 0, 4);
+          var janFourthNextYear = new Date(thisDate.getFullYear()+1, 0, 4);
+  
+          var firstWeekStartThisYear = getFirstWeekStartDate(janFourthThisYear);
+          var firstWeekStartNextYear = getFirstWeekStartDate(janFourthNextYear);
+  
+          if (compareByDay(firstWeekStartThisYear, thisDate) <= 0) {
+            // this date is after the start of the first week of this year
+            if (compareByDay(firstWeekStartNextYear, thisDate) <= 0) {
+              return thisDate.getFullYear()+1;
+            }
+            return thisDate.getFullYear();
+          }
+          return thisDate.getFullYear()-1;
+      }
+  
+      var EXPANSION_RULES_2 = {
+        '%a': function(date) {
+          return WEEKDAYS[date.tm_wday].substring(0,3);
+        },
+        '%A': function(date) {
+          return WEEKDAYS[date.tm_wday];
+        },
+        '%b': function(date) {
+          return MONTHS[date.tm_mon].substring(0,3);
+        },
+        '%B': function(date) {
+          return MONTHS[date.tm_mon];
+        },
+        '%C': function(date) {
+          var year = date.tm_year+1900;
+          return leadingNulls((year/100)|0,2);
+        },
+        '%d': function(date) {
+          return leadingNulls(date.tm_mday, 2);
+        },
+        '%e': function(date) {
+          return leadingSomething(date.tm_mday, 2, ' ');
+        },
+        '%g': function(date) {
+          // %g, %G, and %V give values according to the ISO 8601:2000 standard week-based year.
+          // In this system, weeks begin on a Monday and week 1 of the year is the week that includes
+          // January 4th, which is also the week that includes the first Thursday of the year, and
+          // is also the first week that contains at least four days in the year.
+          // If the first Monday of January is the 2nd, 3rd, or 4th, the preceding days are part of
+          // the last week of the preceding year; thus, for Saturday 2nd January 1999,
+          // %G is replaced by 1998 and %V is replaced by 53. If December 29th, 30th,
+          // or 31st is a Monday, it and any following days are part of week 1 of the following year.
+          // Thus, for Tuesday 30th December 1997, %G is replaced by 1998 and %V is replaced by 01.
+  
+          return getWeekBasedYear(date).toString().substring(2);
+        },
+        '%G': function(date) {
+          return getWeekBasedYear(date);
+        },
+        '%H': function(date) {
+          return leadingNulls(date.tm_hour, 2);
+        },
+        '%I': function(date) {
+          var twelveHour = date.tm_hour;
+          if (twelveHour == 0) twelveHour = 12;
+          else if (twelveHour > 12) twelveHour -= 12;
+          return leadingNulls(twelveHour, 2);
+        },
+        '%j': function(date) {
+          // Day of the year (001-366)
+          return leadingNulls(date.tm_mday+__arraySum(__isLeapYear(date.tm_year+1900) ? __MONTH_DAYS_LEAP : __MONTH_DAYS_REGULAR, date.tm_mon-1), 3);
+        },
+        '%m': function(date) {
+          return leadingNulls(date.tm_mon+1, 2);
+        },
+        '%M': function(date) {
+          return leadingNulls(date.tm_min, 2);
+        },
+        '%n': function() {
+          return '\n';
+        },
+        '%p': function(date) {
+          if (date.tm_hour >= 0 && date.tm_hour < 12) {
+            return 'AM';
+          }
+          return 'PM';
+        },
+        '%S': function(date) {
+          return leadingNulls(date.tm_sec, 2);
+        },
+        '%t': function() {
+          return '\t';
+        },
+        '%u': function(date) {
+          return date.tm_wday || 7;
+        },
+        '%U': function(date) {
+          var days = date.tm_yday + 7 - date.tm_wday;
+          return leadingNulls(Math.floor(days / 7), 2);
+        },
+        '%V': function(date) {
+          // Replaced by the week number of the year (Monday as the first day of the week)
+          // as a decimal number [01,53]. If the week containing 1 January has four
+          // or more days in the new year, then it is considered week 1.
+          // Otherwise, it is the last week of the previous year, and the next week is week 1.
+          // Both January 4th and the first Thursday of January are always in week 1. [ tm_year, tm_wday, tm_yday]
+          var val = Math.floor((date.tm_yday + 7 - (date.tm_wday + 6) % 7 ) / 7);
+          // If 1 Jan is just 1-3 days past Monday, the previous week
+          // is also in this year.
+          if ((date.tm_wday + 371 - date.tm_yday - 2) % 7 <= 2) {
+            val++;
+          }
+          if (!val) {
+            val = 52;
+            // If 31 December of prev year a Thursday, or Friday of a
+            // leap year, then the prev year has 53 weeks.
+            var dec31 = (date.tm_wday + 7 - date.tm_yday - 1) % 7;
+            if (dec31 == 4 || (dec31 == 5 && __isLeapYear(date.tm_year%400-1))) {
+              val++;
+            }
+          } else if (val == 53) {
+            // If 1 January is not a Thursday, and not a Wednesday of a
+            // leap year, then this year has only 52 weeks.
+            var jan1 = (date.tm_wday + 371 - date.tm_yday) % 7;
+            if (jan1 != 4 && (jan1 != 3 || !__isLeapYear(date.tm_year)))
+              val = 1;
+          }
+          return leadingNulls(val, 2);
+        },
+        '%w': function(date) {
+          return date.tm_wday;
+        },
+        '%W': function(date) {
+          var days = date.tm_yday + 7 - ((date.tm_wday + 6) % 7);
+          return leadingNulls(Math.floor(days / 7), 2);
+        },
+        '%y': function(date) {
+          // Replaced by the last two digits of the year as a decimal number [00,99]. [ tm_year]
+          return (date.tm_year+1900).toString().substring(2);
+        },
+        '%Y': function(date) {
+          // Replaced by the year as a decimal number (for example, 1997). [ tm_year]
+          return date.tm_year+1900;
+        },
+        '%z': function(date) {
+          // Replaced by the offset from UTC in the ISO 8601:2000 standard format ( +hhmm or -hhmm ).
+          // For example, "-0430" means 4 hours 30 minutes behind UTC (west of Greenwich).
+          var off = date.tm_gmtoff;
+          var ahead = off >= 0;
+          off = Math.abs(off) / 60;
+          // convert from minutes into hhmm format (which means 60 minutes = 100 units)
+          off = (off / 60)*100 + (off % 60);
+          return (ahead ? '+' : '-') + String("0000" + off).slice(-4);
+        },
+        '%Z': function(date) {
+          return date.tm_zone;
+        },
+        '%%': function() {
+          return '%';
+        }
+      };
+  
+      // Replace %% with a pair of NULLs (which cannot occur in a C string), then
+      // re-inject them after processing.
+      pattern = pattern.replace(/%%/g, '\0\0')
+      for (var rule in EXPANSION_RULES_2) {
+        if (pattern.includes(rule)) {
+          pattern = pattern.replace(new RegExp(rule, 'g'), EXPANSION_RULES_2[rule](date));
+        }
+      }
+      pattern = pattern.replace(/\0\0/g, '%')
+  
+      var bytes = intArrayFromString(pattern, false);
+      if (bytes.length > maxsize) {
+        return 0;
+      }
+  
+      writeArrayToMemory(bytes, s);
+      return bytes.length-1;
+    }
+
 
   function handleException(e) {
       // Certain exception types we do not treat as errors since they are used for
@@ -6030,6 +7190,13 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
         return EXITSTATUS;
       }
       quit_(1, e);
+    }
+
+  function allocateUTF8OnStack(str) {
+      var size = lengthBytesUTF8(str) + 1;
+      var ret = stackAlloc(size);
+      stringToUTF8Array(str, HEAP8, ret, size);
+      return ret;
     }
 
   function runAndAbortIfError(func) {
@@ -6081,7 +7248,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getpid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6477,17 +7644,39 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var asmLibraryArg = {
-  "__syscall_bind": ___syscall_bind,
+  "__syscall_chdir": ___syscall_chdir,
+  "__syscall_chmod": ___syscall_chmod,
+  "__syscall_close": ___syscall_close,
+  "__syscall_connect": ___syscall_connect,
+  "__syscall_dup3": ___syscall_dup3,
+  "__syscall_execve": ___syscall_execve,
+  "__syscall_fchownat": ___syscall_fchownat,
   "__syscall_fcntl64": ___syscall_fcntl64,
   "__syscall_getpid": ___syscall_getpid,
-  "__syscall_recvfrom": ___syscall_recvfrom,
+  "__syscall_ioctl": ___syscall_ioctl,
+  "__syscall_openat": ___syscall_openat,
+  "__syscall_read": ___syscall_read,
+  "__syscall_readv": ___syscall_readv,
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_socket": ___syscall_socket,
-  "emscripten_asm_const_int": _emscripten_asm_const_int,
+  "__syscall_write": ___syscall_write,
+  "__syscall_writev": ___syscall_writev,
+  "_emscripten_get_now_is_monotonic": __emscripten_get_now_is_monotonic,
+  "_gmtime_js": __gmtime_js,
+  "_localtime_js": __localtime_js,
+  "_tzset_js": __tzset_js,
+  "emscripten_date_now": _emscripten_date_now,
+  "emscripten_get_now": _emscripten_get_now,
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
-  "probe_terminal": probe_terminal
+  "environ_get": _environ_get,
+  "environ_sizes_get": _environ_sizes_get,
+  "exit": _exit,
+  "fd_close": _fd_close,
+  "fd_fdstat_get": _fd_fdstat_get,
+  "fd_seek": _fd_seek,
+  "strftime": _strftime
 };
 Asyncify.instrumentWasmImports(asmLibraryArg);
 var asm = createWasm();
@@ -6495,7 +7684,7 @@ var asm = createWasm();
 var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
 
 /** @type {function(...*):?} */
-var _main = Module["_main"] = createExportWrapper("main");
+var _main = Module["_main"] = createExportWrapper("__main_argc_argv");
 
 /** @type {function(...*):?} */
 var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
@@ -6504,16 +7693,16 @@ var ___errno_location = Module["___errno_location"] = createExportWrapper("__err
 var _fflush = Module["_fflush"] = createExportWrapper("fflush");
 
 /** @type {function(...*):?} */
-var _htons = Module["_htons"] = createExportWrapper("htons");
-
-/** @type {function(...*):?} */
-var _ntohs = Module["_ntohs"] = createExportWrapper("ntohs");
+var _free = Module["_free"] = createExportWrapper("free");
 
 /** @type {function(...*):?} */
 var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
-var _free = Module["_free"] = createExportWrapper("free");
+var _htons = Module["_htons"] = createExportWrapper("htons");
+
+/** @type {function(...*):?} */
+var _ntohs = Module["_ntohs"] = createExportWrapper("ntohs");
 
 /** @type {function(...*):?} */
 var _emscripten_stack_init = Module["_emscripten_stack_init"] = function() {
@@ -6550,7 +7739,7 @@ var stackRestore = Module["stackRestore"] = createExportWrapper("stackRestore");
 var stackAlloc = Module["stackAlloc"] = createExportWrapper("stackAlloc");
 
 /** @type {function(...*):?} */
-var dynCall_iiiiii = Module["dynCall_iiiiii"] = createExportWrapper("dynCall_iiiiii");
+var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
 
 /** @type {function(...*):?} */
 var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
@@ -6576,8 +7765,7 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1900;
-var ___stop_em_js = Module['___stop_em_js'] = 2381;
+
 
 
 
@@ -6836,11 +8024,12 @@ var missingLibrarySymbols = [
   'ptrToString',
   'stringToNewUTF8',
   'emscripten_realloc_buffer',
+  'writeSockaddr',
   'getHostByName',
   'convertPCtoSourceLocation',
+  'readAsmConstArgs',
   'mainThreadEM_ASM',
   'jstoi_s',
-  'getExecutableName',
   'listenOnce',
   'autoResumeAudioContext',
   'dynCallLegacy',
@@ -6854,9 +8043,7 @@ var missingLibrarySymbols = [
   'writeI53ToI64Signaling',
   'writeI53ToU64Clamped',
   'writeI53ToU64Signaling',
-  'readI53FromI64',
   'readI53FromU64',
-  'convertI32PairToI53Checked',
   'getCFunc',
   'ccall',
   'cwrap',
@@ -6876,11 +8063,7 @@ var missingLibrarySymbols = [
   'UTF32ToString',
   'stringToUTF32',
   'lengthBytesUTF32',
-  'allocateUTF8',
-  'allocateUTF8OnStack',
   'writeStringToMemory',
-  'writeArrayToMemory',
-  'writeAsciiToMemory',
   'registerKeyEventCallback',
   'maybeCStringToJsString',
   'findEventTarget',
@@ -6924,7 +8107,6 @@ var missingLibrarySymbols = [
   'setCanvasElementSize',
   'getCanvasElementSize',
   'stackTrace',
-  'getEnvStrings',
   'checkWasiClock',
   'doReadv',
   'doWritev',
@@ -7072,8 +8254,17 @@ function callMain(args) {
 
   var entryFunction = Module['_main'];
 
-  var argc = 0;
-  var argv = 0;
+  args = args || [];
+  // Modified By Benoit Baudaux 14/11/2022
+  //args.unshift(thisProgram);
+
+  var argc = args.length;
+  var argv = stackAlloc((argc + 1) * 4);
+  var argv_ptr = argv >> 2;
+  args.forEach((arg) => {
+    HEAP32[argv_ptr++] = allocateUTF8OnStack(arg);
+  });
+  HEAP32[argv_ptr] = 0;
 
   try {
 
