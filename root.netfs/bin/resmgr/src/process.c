@@ -63,7 +63,7 @@ pid_t create_tty_process() {
 
     emscripten_log(EM_LOG_CONSOLE,"starting tty process...");
 
-    execl ("/bin/tty", "tty", (void*)0);
+    execl ("/bin/tty", "/bin/tty", (void*)0);
     
   } else { // Parent process
 
@@ -90,7 +90,7 @@ pid_t create_netfs_process() {
 
     emscripten_log(EM_LOG_CONSOLE,"starting netfs process...");
 
-    execl ("/bin/netfs", "netfs", (void*)0);
+    execl ("/bin/netfs", "/bin/netfs", (void*)0);
     
   } else { // Parent process
     
@@ -117,7 +117,7 @@ pid_t create_init_process() {
 
     emscripten_log(EM_LOG_CONSOLE,"starting init process...");
 
-    execl ("/bin/sysvinit", "init", (void*)0);
+    execl ("/bin/sysvinit", "/bin/sysvinit", "--init", (void*)0);
     
   } else { // Parent process
     

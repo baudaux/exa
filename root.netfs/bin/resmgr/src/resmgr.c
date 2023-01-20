@@ -68,6 +68,10 @@ int main() {
   socklen_t len;
   char buf[1256];
 
+  int execve_size;
+  int execve_pid;
+  char execve_msg[1256];
+
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE, "Starting resmgr v0.1.0 ...");
 
@@ -526,6 +530,25 @@ int main() {
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       
+    }
+    else if (msg->msg_id == EXECVE) {
+
+      emscripten_log(EM_LOG_CONSOLE, "EXECVE from %d: %lu", msg->pid, msg->_u.execve_msg.args_size);
+
+      if (msg->_u.execve_msg.args_size == 0xffffffff) {
+
+	if (msg->pid == ((struct message *)execve_msg)->pid) {
+
+	  ((struct message *)execve_msg)->msg_id |= 0x80;
+
+	  sendto(sock, execve_msg, execve_size, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
+      }
+      else {
+
+	execve_size = bytes_rec;
+	memcpy(execve_msg, msg, bytes_rec);
+      }
     }
   }
   

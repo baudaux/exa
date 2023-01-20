@@ -27,8 +27,8 @@ enum message_id {
   MOUNT = 5,
   UMOUNT,
   FORK,
-  
-  SOCKET = 9,
+  EXECVE,
+  SOCKET,
   BIND = 10,
   OPEN,
   READ,
@@ -123,6 +123,11 @@ struct fork_message {
   pid_t child;
 };
 
+struct execve_message {
+
+  unsigned long args_size;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -144,6 +149,7 @@ struct message {
     struct mount_message mount_msg;
     struct setsid_message setsid_msg;
     struct fork_message fork_msg;
+    struct execve_message execve_msg;
     
   } _u;
 };

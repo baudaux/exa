@@ -755,11 +755,9 @@ function preRun() {
 
     callRuntimeCallbacks(__ATPRERUN__);
 
-    console.log("$$$$$$ Init BroadcastChannel $$$$$$$$$");
-
     /* Modified by Benoit Baudaux 13/1/2023 */
 
-	Module['fd_table'] = {};
+	/*Module['fd_table'] = {};
 	Module['fd_table'].last_fd = 2;
 
 	Module['bc_channels'] = {};
@@ -791,7 +789,7 @@ function preRun() {
 	    Module['rcv_bc_channel'].handler = handler;
 	};
 
-	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;*/
 }
 
 function initRuntime() {
@@ -1211,7 +1209,7 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  2381: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
+  2397: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
 };
 function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]\n\r"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
 
@@ -3800,44 +3798,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
         };
   
         // If debug is enabled register simple default logging callbacks for each Event.
-  
-  	console.log("$$$$$$ Init BroadcastChannel $$$$$$$$$");
-  
-  	/* Modified by Benoit Baudaux 13/1/2023 */
-  
-  	Module['fd_table'] = {};
-  	Module['fd_table'].last_fd = 2;
-  
-  	Module['bc_channels'] = {};
-  	Module['get_broadcast_channel'] = (name) => {
-  
-  	    if (name in Module['bc_channels']) {
-  		return Module['bc_channels'][name];
-  	    }
-  	    else {
-  
-  		Module['bc_channels'][name] = new BroadcastChannel(name);
-  		return Module['bc_channels'][name];
-  	    }
-  	};
-  
-  	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
-  
-  	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
-  
-  	    if (Module['rcv_bc_channel'].handler) {
-  
-  		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
-  		    return;
-  	    }
-  	};
-  
-  	Module['rcv_bc_channel'].set_handler = (handler) => {
-  
-  	    Module['rcv_bc_channel'].handler = handler;
-  	};
-  
-  	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+  	
   
         return FS.createNode(null, '/', 16384 | 511 /* 0777 */, 0);
       },createSocket:function(family, type, protocol) {
@@ -5157,9 +5118,9 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   
   		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   
-  		let buf = Module._malloc(256);
+  		let buf = new Uint8Array(256);
   
-  		Module.HEAPU8[buf] = 9; // SOCKET
+  		buf[0] = 9; // SOCKET
   		
   		/*//padding
   		  buf[1] = 0;
@@ -5169,42 +5130,40 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   		let pid = parseInt(window.frameElement.getAttribute('pid'));
   
   		// pid
-  		Module.HEAPU8[buf+4] = pid & 0xff;
-  		Module.HEAPU8[buf+5] = (pid >> 8) & 0xff;
-  		Module.HEAPU8[buf+6] = (pid >> 16) & 0xff;
-  		Module.HEAPU8[buf+7] = (pid >> 24) & 0xff;
+  		buf[4] = pid & 0xff;
+  		buf[5] = (pid >> 8) & 0xff;
+  		buf[6] = (pid >> 16) & 0xff;
+  		buf[7] = (pid >> 24) & 0xff;
   
   		// errno
-  		Module.HEAPU8[buf+8] = 0x0;
-  		Module.HEAPU8[buf+9] = 0x0;
-  		Module.HEAPU8[buf+10] = 0x0;
-  		Module.HEAPU8[buf+11] = 0x0;
+  		buf[8] = 0x0;
+  		buf[9] = 0x0;
+  		buf[10] = 0x0;
+  		buf[11] = 0x0;
   
   		// fd
-  		Module.HEAPU8[buf+12] = 0x0;
-  		Module.HEAPU8[buf+13] = 0x0;
-  		Module.HEAPU8[buf+14] = 0x0;
-  		Module.HEAPU8[buf+15] = 0x0;
+  		buf[12] = 0x0;
+  		buf[3] = 0x0;
+  		buf[14] = 0x0;
+  		buf[15] = 0x0;
   		
   		// domain
-  		Module.HEAPU8[buf+16] = domain & 0xff;
-  		Module.HEAPU8[buf+17] = (domain >> 8) & 0xff;
-  		Module.HEAPU8[buf+18] = (domain >> 16) & 0xff;
-  		Module.HEAPU8[buf+19] = (domain >> 24) & 0xff;
+  		buf[16] = domain & 0xff;
+  		buf[17] = (domain >> 8) & 0xff;
+  		buf[18] = (domain >> 16) & 0xff;
+  		buf[19] = (domain >> 24) & 0xff;
   
   		// type
-  		Module.HEAPU8[buf+20] = type & 0xff;
-  		Module.HEAPU8[buf+21] = (type >> 8) & 0xff;
-  		Module.HEAPU8[buf+22] = (type >> 16) & 0xff;
-  		Module.HEAPU8[buf+23] = (type >> 24) & 0xff;
+  		buf[20] = type & 0xff;
+  		buf[21] = (type >> 8) & 0xff;
+  		buf[22] = (type >> 16) & 0xff;
+  		buf[23] = (type >> 24) & 0xff;
   
   		// protocol
-  		Module.HEAPU8[buf+24] = protocol & 0xff;
-  		Module.HEAPU8[buf+25] = (protocol >> 8) & 0xff;
-  		Module.HEAPU8[buf+26] = (protocol >> 16) & 0xff;
-  		Module.HEAPU8[buf+27] = (protocol >> 24) & 0xff;
-  		
-  		let buf2 = Module.HEAPU8.slice(buf,buf+256);
+  		buf[24] = protocol & 0xff;
+  		buf[25] = (protocol >> 8) & 0xff;
+  		buf[26] = (protocol >> 16) & 0xff;
+  		buf[27] = (protocol >> 24) & 0xff;
   
   		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
@@ -5256,13 +5215,11 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   		let msg = {
   
   		    from: Module['rcv_bc_channel'].name,
-  		    buf: buf2,
+  		    buf: buf,
   		    len: 256
   		};
   
   		bc.postMessage(msg);
-  
-  		Module._free(buf);
   	    }
   	    else {
   
@@ -6576,8 +6533,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1900;
-var ___stop_em_js = Module['___stop_em_js'] = 2381;
+var ___start_em_js = Module['___start_em_js'] = 1916;
+var ___stop_em_js = Module['___stop_em_js'] = 2397;
 
 
 
@@ -6963,7 +6920,7 @@ var calledRun;
 
 dependenciesFulfilled = function runCaller() {
 
-    // Added by Benoit Baudaux 02/12/2020
+    // Added by Benoit Baudaux 02/12/2022
     if (window.name == "child") {
 
 	let channel = 'channel.1.'+window.frameElement.getAttribute('pid')+'.fork';
@@ -7059,7 +7016,130 @@ dependenciesFulfilled = function runCaller() {
               
             return;
 	}
-    }					
+    }
+    // Added by Benoit Baudaux 20/1/2023
+    else if (window.name == "exec") {
+
+	Module['fd_table'] = {};
+	Module['fd_table'].last_fd = 2;
+
+	Module['bc_channels'] = {};
+	Module['get_broadcast_channel'] = (name) => {
+
+	    if (name in Module['bc_channels']) {
+		return Module['bc_channels'][name];
+	    }
+	    else {
+
+		Module['bc_channels'][name] = new BroadcastChannel(name);
+		return Module['bc_channels'][name];
+	    }
+	};
+
+	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+
+	console.log("rcv_bc_channel created");
+
+	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+
+	    if (Module['rcv_bc_channel'].handler) {
+
+		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+		    return;
+	    }
+	};
+
+	Module['rcv_bc_channel'].set_handler = (handler) => {
+
+	    Module['rcv_bc_channel'].handler = handler;
+	};
+
+	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+
+	console.log("From exec: need to get back args and env");
+
+	let buf_size = 1256;
+
+	let buf = new Uint8Array(buf_size);
+
+	buf[0] = 8; // EXECVE
+
+	let pid = parseInt(window.frameElement.getAttribute('pid'));
+
+	// pid
+	buf[4] = pid & 0xff;
+	buf[5] = (pid >> 8) & 0xff;
+	buf[6] = (pid >> 16) & 0xff;
+	buf[7] = (pid >> 24) & 0xff;
+
+	// errno
+	buf[8] = 0;
+	buf[9] = 0;
+	buf[10] = 0;
+	buf[11] = 0;
+
+	// size
+	buf[12] = 0xff;
+	buf[13] = 0xff;
+	buf[14] = 0xff;
+	buf[15] = 0xff;
+
+	Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+
+	    Module['rcv_bc_channel'].set_handler(null);
+
+	    let msg2 = messageEvent.data;
+
+	    if (msg2.buf[0] == (8|0x80)) {
+
+		console.log("Return from exec: time to restore !!!!!");
+
+		console.log(msg2.buf);
+
+		arguments_ = [];
+
+		let args_size = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+
+		console.log(args_size);
+
+		td = new TextDecoder("utf-8");
+
+		let i = 16;
+
+		for (; i < (16+args_size); ) {
+
+		    let j = 0;
+
+		    for (; msg2.buf[i+j]; j++) ;
+
+		    let a = msg2.buf.slice(i,i+j);
+
+		    arguments_.push(td.decode(a));
+
+		    i += j+1;
+		}
+
+		console.log(arguments_);
+
+		// If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
+		if (!calledRun) run();
+		if (!calledRun) dependenciesFulfilled = runCaller; // try this again later, after new deps are fulfilled
+	    }
+	});
+
+	let msg = {
+	    
+	    from: Module['rcv_bc_channel'].name,
+	    buf: buf,
+	    len: buf_size
+	};
+
+	let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+
+	bc.postMessage(msg);
+
+	return;
+    }
     
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
   if (!calledRun) run();

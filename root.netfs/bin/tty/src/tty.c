@@ -185,6 +185,8 @@ int main() {
     return -1;
   }
 
+  emscripten_log(EM_LOG_CONSOLE,"Socket created");
+
   /* Bind server socket to TTY_PATH */
   memset(&local_addr, 0, sizeof(local_addr));
   local_addr.sun_family = AF_UNIX;
@@ -209,6 +211,8 @@ int main() {
   strcpy((char *)&msg->_u.dev_msg.dev_name[0], "tty");
   
   sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
+
+  emscripten_log(EM_LOG_CONSOLE,"Message sent");
 
   while (1) {
     
