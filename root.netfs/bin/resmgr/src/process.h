@@ -81,6 +81,7 @@ int process_find_open_fd(unsigned char type, unsigned short major, int remote_fd
 struct sockaddr_un * process_get_peer_addr(pid_t pid);
 
 pid_t process_setsid(pid_t pid);
+pid_t process_getsid(pid_t pid);
 
 void dump_processes();
 

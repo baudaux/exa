@@ -168,6 +168,9 @@ struct device_ops * get_device_from_fd(int fd) {
   return devices[clients[fd].minor];
 }
 
+
+extern char **environ;
+
 int main() {
 
   int sock;
@@ -178,6 +181,9 @@ int main() {
   
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE,"Starting " TTY_VERSION "...");
+
+  // Access to environ provokes call to __emscripten_environ_constructor (why ?)
+  emscripten_log(EM_LOG_CONSOLE,"environ: %x", environ);
   
   /* Create the server local socket */
   sock = socket (AF_UNIX, SOCK_DGRAM, 0);

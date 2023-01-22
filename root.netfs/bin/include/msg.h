@@ -37,6 +37,7 @@ enum message_id {
   CLOSE = 15,
   SETSID,
   FCNTL,
+  GETSID,
 };
 
 enum dev_type {

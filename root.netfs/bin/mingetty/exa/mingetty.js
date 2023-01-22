@@ -1211,7 +1211,9 @@ var tempI64;
 var ASM_CONSTS = {
   
 };
-
+function environ_get_count() { if (Module['env']) { return Module['env'].count; } return 0; }
+function environ_get_buf_size() { if (Module['env']) { return Module['env'].size; } return 0; }
+function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['env'].buf, buf); let count = 0; for (let i = 0; i < Module['env'].size;) { if (count >= Module['env'].count) break; Module.HEAPU8[env+4*count] = (buf+i) & 0xff; Module.HEAPU8[env+4*count+1] = ((buf+i) >> 8) & 0xff; Module.HEAPU8[env+4*count+2] = ((buf+i) >> 16) & 0xff; Module.HEAPU8[env+4*count+3] = ((buf+i) >> 24) & 0xff; let j = 0; for (; Module.HEAPU8[buf+i+j]; j++) ; i += j+1; count++; } } }
 
 
 
@@ -5037,9 +5039,11 @@ var ASM_CONSTS = {
   	    // Copy env in buf
   
   	    let e = 16 + i;
-  	    let f = e + 4;
+  	    let f = e + 8; // keep space for count and size (in that order)
   
   	    i = 0;
+  
+  	    let count = 0;
   
   	    for (let offset = 0; ; offset += 4) {
   
@@ -5047,6 +5051,8 @@ var ASM_CONSTS = {
   
   		if (!str)
   		    break;
+  
+  		count++;
   
   		let j;
   
@@ -5061,10 +5067,15 @@ var ASM_CONSTS = {
   		i += j;
   	    }
   
-  	    buf[e] = i & 0xff;
-  	    buf[e+1] = (i >> 8) & 0xff;
-  	    buf[e+2] = (i >> 16) & 0xff;
-  	    buf[e+3] = (i >> 24) & 0xff;
+  	    buf[e] = count & 0xff;
+  	    buf[e+1] = (count >> 8) & 0xff;
+  	    buf[e+2] = (count >> 16) & 0xff;
+  	    buf[e+3] = (count >> 24) & 0xff;
+  
+  	    buf[e+4] = i & 0xff;
+  	    buf[e+5] = (i >> 8) & 0xff;
+  	    buf[e+6] = (i >> 16) & 0xff;
+  	    buf[e+7] = (i >> 24) & 0xff;
   
   	    // rcv_bc_channel is not registered if it is a fork of resmgr
   
@@ -6801,73 +6812,6 @@ var ASM_CONSTS = {
       abortOnCannotGrowMemory(requestedSize);
     }
 
-  var ENV = {};
-  
-  function getExecutableName() {
-      return thisProgram || './this.program';
-    }
-  function getEnvStrings() {
-      if (!getEnvStrings.strings) {
-        // Default values.
-        // Browser language detection #8751
-        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
-        var env = {
-          'USER': 'web_user',
-          'LOGNAME': 'web_user',
-          'PATH': '/',
-          'PWD': '/',
-          'HOME': '/home/web_user',
-          'LANG': lang,
-          '_': getExecutableName()
-        };
-        // Apply the user-provided values, if any.
-        for (var x in ENV) {
-          // x is a key in ENV; if ENV[x] is undefined, that means it was
-          // explicitly set to be so. We allow user code to do that to
-          // force variables with default values to remain unset.
-          if (ENV[x] === undefined) delete env[x];
-          else env[x] = ENV[x];
-        }
-        var strings = [];
-        for (var x in env) {
-          strings.push(x + '=' + env[x]);
-        }
-        getEnvStrings.strings = strings;
-      }
-      return getEnvStrings.strings;
-    }
-  
-  /** @param {boolean=} dontAddNull */
-  function writeAsciiToMemory(str, buffer, dontAddNull) {
-      for (var i = 0; i < str.length; ++i) {
-        assert(str.charCodeAt(i) === (str.charCodeAt(i) & 0xff));
-        HEAP8[((buffer++)>>0)] = str.charCodeAt(i);
-      }
-      // Null-terminate the pointer to the HEAP.
-      if (!dontAddNull) HEAP8[((buffer)>>0)] = 0;
-    }
-  function _environ_get(__environ, environ_buf) {
-      var bufSize = 0;
-      getEnvStrings().forEach(function(string, i) {
-        var ptr = environ_buf + bufSize;
-        HEAPU32[(((__environ)+(i*4))>>2)] = ptr;
-        writeAsciiToMemory(string, ptr);
-        bufSize += string.length + 1;
-      });
-      return 0;
-    }
-
-  function _environ_sizes_get(penviron_count, penviron_buf_size) {
-      var strings = getEnvStrings();
-      HEAPU32[((penviron_count)>>2)] = strings.length;
-      var bufSize = 0;
-      strings.forEach(function(string) {
-        bufSize += string.length + 1;
-      });
-      HEAPU32[((penviron_buf_size)>>2)] = bufSize;
-      return 0;
-    }
-
   function _proc_exit(code) {
       EXITSTATUS = code;
       if (!keepRuntimeAlive()) {
@@ -7768,8 +7712,9 @@ var asmLibraryArg = {
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
-  "environ_get": _environ_get,
-  "environ_sizes_get": _environ_sizes_get,
+  "environ_get": environ_get,
+  "environ_get_buf_size": environ_get_buf_size,
+  "environ_get_count": environ_get_count,
   "exit": _exit,
   "fd_close": _fd_close,
   "fd_fdstat_get": _fd_fdstat_get,
@@ -7863,7 +7808,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-
+var ___start_em_js = Module['___start_em_js'] = 5516;
+var ___stop_em_js = Module['___stop_em_js'] = 6134;
 
 
 
@@ -8128,6 +8074,7 @@ var missingLibrarySymbols = [
   'readAsmConstArgs',
   'mainThreadEM_ASM',
   'jstoi_s',
+  'getExecutableName',
   'listenOnce',
   'autoResumeAudioContext',
   'dynCallLegacy',
@@ -8162,6 +8109,7 @@ var missingLibrarySymbols = [
   'stringToUTF32',
   'lengthBytesUTF32',
   'writeStringToMemory',
+  'writeAsciiToMemory',
   'registerKeyEventCallback',
   'maybeCStringToJsString',
   'findEventTarget',
@@ -8205,6 +8153,7 @@ var missingLibrarySymbols = [
   'setCanvasElementSize',
   'getCanvasElementSize',
   'stackTrace',
+  'getEnvStrings',
   'checkWasiClock',
   'doReadv',
   'doWritev',
@@ -8243,6 +8192,44 @@ var calledRun;
 
 dependenciesFulfilled = function runCaller() {
 
+    // Added by Benoit Baudaux 20/1/2023
+    
+    Module['fd_table'] = {};
+    Module['fd_table'].last_fd = 2;
+
+    Module['bc_channels'] = {};
+    Module['get_broadcast_channel'] = (name) => {
+
+	if (name in Module['bc_channels']) {
+	    return Module['bc_channels'][name];
+	}
+	else {
+
+	    Module['bc_channels'][name] = new BroadcastChannel(name);
+	    return Module['bc_channels'][name];
+	}
+    };
+
+    Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+
+    console.log("rcv_bc_channel created");
+
+    Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+
+	if (Module['rcv_bc_channel'].handler) {
+
+	    if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+		return;
+	}
+    };
+
+    Module['rcv_bc_channel'].set_handler = (handler) => {
+
+	Module['rcv_bc_channel'].handler = handler;
+    };
+
+    Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+    
     // Added by Benoit Baudaux 02/12/2022
     if (window.name == "child") {
 
@@ -8343,43 +8330,7 @@ dependenciesFulfilled = function runCaller() {
     // Added by Benoit Baudaux 20/1/2023
     else if (window.name == "exec") {
 
-	Module['fd_table'] = {};
-	Module['fd_table'].last_fd = 2;
-
-	Module['bc_channels'] = {};
-	Module['get_broadcast_channel'] = (name) => {
-
-	    if (name in Module['bc_channels']) {
-		return Module['bc_channels'][name];
-	    }
-	    else {
-
-		Module['bc_channels'][name] = new BroadcastChannel(name);
-		return Module['bc_channels'][name];
-	    }
-	};
-
-	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
-
-	console.log("rcv_bc_channel created");
-
-	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
-
-	    if (Module['rcv_bc_channel'].handler) {
-
-		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
-		    return;
-	    }
-	};
-
-	Module['rcv_bc_channel'].set_handler = (handler) => {
-
-	    Module['rcv_bc_channel'].handler = handler;
-	};
-
-	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
-
-	console.log("From exec: need to get back args and env");
+	//console.log("From exec: need to get back args and env");
 
 	let buf_size = 1256;
 
@@ -8415,15 +8366,15 @@ dependenciesFulfilled = function runCaller() {
 
 	    if (msg2.buf[0] == (8|0x80)) {
 
-		console.log("Return from exec: time to restore !!!!!");
+		//console.log("Return from exec: time to restore !!!!!");
 
-		console.log(msg2.buf);
+		//console.log(msg2.buf);
 
 		arguments_ = [];
 
 		let args_size = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
 
-		console.log(args_size);
+		//console.log(args_size);
 
 		td = new TextDecoder("utf-8");
 
@@ -8442,7 +8393,20 @@ dependenciesFulfilled = function runCaller() {
 		    i += j+1;
 		}
 
-		console.log(arguments_);
+		//console.log(arguments_);
+
+		let env_count = msg2.buf[i] | (msg2.buf[i+1] << 8) | (msg2.buf[i+2] << 16) |  (msg2.buf[i+3] << 24);
+
+		let env_size = msg2.buf[i+4] | (msg2.buf[i+5] << 8) | (msg2.buf[i+6] << 16) |  (msg2.buf[i+7] << 24);
+
+		Module['env'] = {
+
+		    count: env_count,
+		    size: env_size,
+		    buf : msg2.buf.slice(i+8,i+8+env_size)
+		};
+
+		//console.log(Module['env']);
 
 		// If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
 		if (!calledRun) run();
@@ -8473,7 +8437,8 @@ function callMain(args) {
   assert(runDependencies == 0, 'cannot call main when async dependencies remain! (listen on Module["onRuntimeInitialized"])');
   assert(__ATPRERUN__.length == 0, 'cannot call main when preRun functions remain to be called');
 
-  var entryFunction = Module['_main'];
+    var entryFunction = Module['_main'];
+    
 
   args = args || [];
   // Modified By Benoit Baudaux 14/11/2022

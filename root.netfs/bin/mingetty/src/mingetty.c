@@ -372,8 +372,6 @@ int main (int argc, char **argv)
 	char *logname, *s;
 	int c;
 
-	emscripten_log(EM_LOG_CONSOLE, "Start mingetty");
-
 	progname = argv[0];
 	if (!progname)
 		progname = "mingetty";
@@ -414,12 +412,6 @@ int main (int argc, char **argv)
 		default:
 			usage ();
 		}
-	}
-
-	// BB
-	if (autologin) {
-
-	  emscripten_log(EM_LOG_CONSOLE, "autologin: %s", autologin);
 	}
 	
 	if (longhostname == 0 && (s = strchr (hn, '.')))

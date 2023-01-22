@@ -334,3 +334,8 @@ pid_t process_setsid(pid_t pid) {
   return -1;
 }
 
+pid_t process_getsid(pid_t pid) {
+
+  return processes[pid].sid;
+}
+

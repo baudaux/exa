@@ -1209,9 +1209,12 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  2397: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
+  3031: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
 };
 function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]\n\r"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
+function environ_get_count() { if (Module['env']) { return Module['env'].count; } return 0; }
+function environ_get_buf_size() { if (Module['env']) { return Module['env'].size; } return 0; }
+function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['env'].buf, buf); let count = 0; for (let i = 0; i < Module['env'].size;) { if (count >= Module['env'].count) break; Module.HEAPU8[env+4*count] = (buf+i) & 0xff; Module.HEAPU8[env+4*count+1] = ((buf+i) >> 8) & 0xff; Module.HEAPU8[env+4*count+2] = ((buf+i) >> 16) & 0xff; Module.HEAPU8[env+4*count+3] = ((buf+i) >> 24) & 0xff; let j = 0; for (; Module.HEAPU8[buf+i+j]; j++) ; i += j+1; count++; } } }
 
 
 
@@ -6444,6 +6447,9 @@ var asmLibraryArg = {
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
+  "environ_get": environ_get,
+  "environ_get_buf_size": environ_get_buf_size,
+  "environ_get_count": environ_get_count,
   "probe_terminal": probe_terminal
 };
 Asyncify.instrumentWasmImports(asmLibraryArg);
@@ -6533,8 +6539,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1916;
-var ___stop_em_js = Module['___stop_em_js'] = 2397;
+var ___start_em_js = Module['___start_em_js'] = 1932;
+var ___stop_em_js = Module['___stop_em_js'] = 3031;
 
 
 
@@ -6920,6 +6926,44 @@ var calledRun;
 
 dependenciesFulfilled = function runCaller() {
 
+    // Added by Benoit Baudaux 20/1/2023
+    
+    Module['fd_table'] = {};
+    Module['fd_table'].last_fd = 2;
+
+    Module['bc_channels'] = {};
+    Module['get_broadcast_channel'] = (name) => {
+
+	if (name in Module['bc_channels']) {
+	    return Module['bc_channels'][name];
+	}
+	else {
+
+	    Module['bc_channels'][name] = new BroadcastChannel(name);
+	    return Module['bc_channels'][name];
+	}
+    };
+
+    Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+
+    console.log("rcv_bc_channel created");
+
+    Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+
+	if (Module['rcv_bc_channel'].handler) {
+
+	    if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+		return;
+	}
+    };
+
+    Module['rcv_bc_channel'].set_handler = (handler) => {
+
+	Module['rcv_bc_channel'].handler = handler;
+    };
+
+    Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+    
     // Added by Benoit Baudaux 02/12/2022
     if (window.name == "child") {
 
@@ -7020,43 +7064,7 @@ dependenciesFulfilled = function runCaller() {
     // Added by Benoit Baudaux 20/1/2023
     else if (window.name == "exec") {
 
-	Module['fd_table'] = {};
-	Module['fd_table'].last_fd = 2;
-
-	Module['bc_channels'] = {};
-	Module['get_broadcast_channel'] = (name) => {
-
-	    if (name in Module['bc_channels']) {
-		return Module['bc_channels'][name];
-	    }
-	    else {
-
-		Module['bc_channels'][name] = new BroadcastChannel(name);
-		return Module['bc_channels'][name];
-	    }
-	};
-
-	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
-
-	console.log("rcv_bc_channel created");
-
-	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
-
-	    if (Module['rcv_bc_channel'].handler) {
-
-		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
-		    return;
-	    }
-	};
-
-	Module['rcv_bc_channel'].set_handler = (handler) => {
-
-	    Module['rcv_bc_channel'].handler = handler;
-	};
-
-	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
-
-	console.log("From exec: need to get back args and env");
+	//console.log("From exec: need to get back args and env");
 
 	let buf_size = 1256;
 
@@ -7092,15 +7100,15 @@ dependenciesFulfilled = function runCaller() {
 
 	    if (msg2.buf[0] == (8|0x80)) {
 
-		console.log("Return from exec: time to restore !!!!!");
+		//console.log("Return from exec: time to restore !!!!!");
 
-		console.log(msg2.buf);
+		//console.log(msg2.buf);
 
 		arguments_ = [];
 
 		let args_size = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
 
-		console.log(args_size);
+		//console.log(args_size);
 
 		td = new TextDecoder("utf-8");
 
@@ -7119,7 +7127,20 @@ dependenciesFulfilled = function runCaller() {
 		    i += j+1;
 		}
 
-		console.log(arguments_);
+		//console.log(arguments_);
+
+		let env_count = msg2.buf[i] | (msg2.buf[i+1] << 8) | (msg2.buf[i+2] << 16) |  (msg2.buf[i+3] << 24);
+
+		let env_size = msg2.buf[i+4] | (msg2.buf[i+5] << 8) | (msg2.buf[i+6] << 16) |  (msg2.buf[i+7] << 24);
+
+		Module['env'] = {
+
+		    count: env_count,
+		    size: env_size,
+		    buf : msg2.buf.slice(i+8,i+8+env_size)
+		};
+
+		//console.log(Module['env']);
 
 		// If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
 		if (!calledRun) run();
@@ -7150,7 +7171,8 @@ function callMain(args) {
   assert(runDependencies == 0, 'cannot call main when async dependencies remain! (listen on Module["onRuntimeInitialized"])');
   assert(__ATPRERUN__.length == 0, 'cannot call main when preRun functions remain to be called');
 
-  var entryFunction = Module['_main'];
+    var entryFunction = Module['_main'];
+    
 
   var argc = 0;
   var argv = 0;

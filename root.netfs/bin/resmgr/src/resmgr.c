@@ -519,6 +519,21 @@ int main() {
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       
     }
+    else if (msg->msg_id == GETSID) {
+
+      emscripten_log(EM_LOG_CONSOLE, "GETSID from %d", msg->pid);
+
+      msg->_u.setsid_msg.sid = process_getsid(msg->pid);
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      if (msg->_u.setsid_msg.sid < 0)
+	msg->_errno = EPERM;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      
+    }
     else if (msg->msg_id == FORK) {
 
       emscripten_log(EM_LOG_CONSOLE, "FORK from %d", msg->pid);

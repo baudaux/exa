@@ -7140,6 +7140,44 @@ var calledRun;
 
 dependenciesFulfilled = function runCaller() {
 
+    // Added by Benoit Baudaux 20/1/2023
+    
+    Module['fd_table'] = {};
+    Module['fd_table'].last_fd = 2;
+
+    Module['bc_channels'] = {};
+    Module['get_broadcast_channel'] = (name) => {
+
+	if (name in Module['bc_channels']) {
+	    return Module['bc_channels'][name];
+	}
+	else {
+
+	    Module['bc_channels'][name] = new BroadcastChannel(name);
+	    return Module['bc_channels'][name];
+	}
+    };
+
+    Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+
+    console.log("rcv_bc_channel created");
+
+    Module['rcv_bc_channel'].default_handler = (messageEvent) => {
+
+	if (Module['rcv_bc_channel'].handler) {
+
+	    if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
+		return;
+	}
+    };
+
+    Module['rcv_bc_channel'].set_handler = (handler) => {
+
+	Module['rcv_bc_channel'].handler = handler;
+    };
+
+    Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
+    
     // Added by Benoit Baudaux 02/12/2022
     if (window.name == "child") {
 
@@ -7240,43 +7278,7 @@ dependenciesFulfilled = function runCaller() {
     // Added by Benoit Baudaux 20/1/2023
     else if (window.name == "exec") {
 
-	Module['fd_table'] = {};
-	Module['fd_table'].last_fd = 2;
-
-	Module['bc_channels'] = {};
-	Module['get_broadcast_channel'] = (name) => {
-
-	    if (name in Module['bc_channels']) {
-		return Module['bc_channels'][name];
-	    }
-	    else {
-
-		Module['bc_channels'][name] = new BroadcastChannel(name);
-		return Module['bc_channels'][name];
-	    }
-	};
-
-	Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
-
-	console.log("rcv_bc_channel created");
-
-	Module['rcv_bc_channel'].default_handler = (messageEvent) => {
-
-	    if (Module['rcv_bc_channel'].handler) {
-
-		if (Module['rcv_bc_channel'].handler(messageEvent) == 0)
-		    return;
-	    }
-	};
-
-	Module['rcv_bc_channel'].set_handler = (handler) => {
-
-	    Module['rcv_bc_channel'].handler = handler;
-	};
-
-	Module['rcv_bc_channel'].onmessage = Module['rcv_bc_channel'].default_handler;
-
-	console.log("From exec: need to get back args and env");
+	//console.log("From exec: need to get back args and env");
 
 	let buf_size = 1256;
 
@@ -7312,15 +7314,15 @@ dependenciesFulfilled = function runCaller() {
 
 	    if (msg2.buf[0] == (8|0x80)) {
 
-		console.log("Return from exec: time to restore !!!!!");
+		//console.log("Return from exec: time to restore !!!!!");
 
-		console.log(msg2.buf);
+		//console.log(msg2.buf);
 
 		arguments_ = [];
 
 		let args_size = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
 
-		console.log(args_size);
+		//console.log(args_size);
 
 		td = new TextDecoder("utf-8");
 
@@ -7339,7 +7341,20 @@ dependenciesFulfilled = function runCaller() {
 		    i += j+1;
 		}
 
-		console.log(arguments_);
+		//console.log(arguments_);
+
+		let env_count = msg2.buf[i] | (msg2.buf[i+1] << 8) | (msg2.buf[i+2] << 16) |  (msg2.buf[i+3] << 24);
+
+		let env_size = msg2.buf[i+4] | (msg2.buf[i+5] << 8) | (msg2.buf[i+6] << 16) |  (msg2.buf[i+7] << 24);
+
+		Module['env'] = {
+
+		    count: env_count,
+		    size: env_size,
+		    buf : msg2.buf.slice(i+8,i+8+env_size)
+		};
+
+		//console.log(Module['env']);
 
 		// If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
 		if (!calledRun) run();
@@ -7370,7 +7385,8 @@ function callMain(args) {
   assert(runDependencies == 0, 'cannot call main when async dependencies remain! (listen on Module["onRuntimeInitialized"])');
   assert(__ATPRERUN__.length == 0, 'cannot call main when preRun functions remain to be called');
 
-  var entryFunction = Module['_main'];
+    var entryFunction = Module['_main'];
+    
 
   var argc = 0;
   var argv = 0;
