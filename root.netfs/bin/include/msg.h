@@ -38,6 +38,7 @@ enum message_id {
   SETSID,
   FCNTL,
   GETSID,
+  DUP,
 };
 
 enum dev_type {
@@ -114,6 +115,12 @@ struct mount_message {
   char pathname[1024];
 };
 
+struct getsid_message {
+
+  pid_t pid;
+  pid_t sid;
+};
+
 struct setsid_message {
 
   pid_t sid;
@@ -127,6 +134,12 @@ struct fork_message {
 struct execve_message {
 
   unsigned long args_size;
+};
+
+struct dup_message {
+  
+  int fd;
+  int new_fd;
 };
 
 struct message {
@@ -148,9 +161,11 @@ struct message {
     struct ioctl_message ioctl_msg;
     struct fcntl_message fcntl_msg;
     struct mount_message mount_msg;
+    struct getsid_message getsid_msg;
     struct setsid_message setsid_msg;
     struct fork_message fork_msg;
     struct execve_message execve_msg;
+    struct dup_message dup_msg;
     
   } _u;
 };

@@ -121,7 +121,7 @@ pid_t create_init_process() {
     
   } else { // Parent process
     
-    emscripten_log(EM_LOG_CONSOLE,"init process created: %d",pid);
+    emscripten_log(EM_LOG_CONSOLE, "init process created: %d", pid);
 
     return pid;
   }
@@ -131,6 +131,8 @@ pid_t create_init_process() {
 
 pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
+  emscripten_log(EM_LOG_CONSOLE,"process_fork: %d %d", pid, ppid);
+  
   if (pid < 0)
     pid = nb_processes;
   else
@@ -145,6 +147,8 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
   processes[pid].ppid = ppid;
 
   if (ppid >= 0) {
+
+    emscripten_log(EM_LOG_CONSOLE,"(2) process_fork: %d %d %d %d", pid, ppid, processes[ppid].pgid, processes[ppid].sid);
 
     processes[pid].pgid =  processes[ppid].pgid;
     processes[pid].sid =  processes[ppid].sid;
@@ -198,7 +202,7 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 	processes[pid].fds[i].type = processes[ppid].fds[i].type;
 	processes[pid].fds[i].major = processes[ppid].fds[i].major;
 	processes[pid].fds[i].minor = processes[ppid].fds[i].minor;
-	strcpy(processes[pid].fds[i].peer, processes[ppid].fds[i].peer);
+	//strcpy(processes[pid].fds[i].peer, processes[ppid].fds[i].peer);
       }
     }
   }
@@ -214,7 +218,7 @@ void dump_processes() {
 
   for (int i = 0; i < nb_processes; ++i) {
 
-    emscripten_log(EM_LOG_CONSOLE, "* %d %d %s %d", processes[i].pid, processes[i].ppid, processes[i].name, processes[i].proc_state);
+    emscripten_log(EM_LOG_CONSOLE, "* %d %d %d %d %s %d", processes[i].pid, processes[i].ppid, processes[i].pgid, processes[i].sid, processes[i].name, processes[i].proc_state);
   }
 }
 
@@ -324,6 +328,8 @@ pid_t process_setsid(pid_t pid) {
 
   if (!process_group_exists(pid)) { // process is not process group leader
 
+     emscripten_log(EM_LOG_CONSOLE,"process_setsid: successful -> %d", pid);
+     
     processes[pid].pgid = pid;
     processes[pid].sid = pid;
     processes[pid].term = NULL;
@@ -335,7 +341,59 @@ pid_t process_setsid(pid_t pid) {
 }
 
 pid_t process_getsid(pid_t pid) {
-
+  
   return processes[pid].sid;
 }
 
+int process_dup(pid_t pid, int fd, int new_fd) {
+
+  int i;
+  
+  for (i = 0; i < NB_FILES_MAX; ++i) {
+
+    if (processes[pid].fds[i].fd == fd)
+      break;
+  }
+
+  if (i >= NB_FILES_MAX)
+    return -1;
+
+  if (new_fd >= 0) {
+
+    if (new_fd == fd) {
+
+      return new_fd;
+    }
+    else {
+
+      process_close_fd(pid, new_fd);
+
+      // TODO: close on dirver side
+    }
+  }
+  else {
+
+    processes[pid].last_fd++;
+
+    new_fd = processes[pid].last_fd;
+  }
+  
+  int j;
+  
+  for (j = 0; j < NB_FILES_MAX; ++j) {
+
+    if (processes[pid].fds[j].fd == -1)
+      break;
+  }
+
+  if (j >= NB_FILES_MAX)
+    return -1;
+
+  processes[pid].fds[j].fd = new_fd;
+  processes[pid].fds[j].remote_fd = processes[pid].fds[i].remote_fd;
+  processes[pid].fds[j].type = processes[pid].fds[i].type;
+  processes[pid].fds[j].major = processes[pid].fds[i].major;
+  processes[pid].fds[j].minor = processes[pid].fds[i].minor;
+  
+  return new_fd;
+}

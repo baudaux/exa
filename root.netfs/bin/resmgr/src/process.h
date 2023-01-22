@@ -29,9 +29,9 @@ struct file_desc {
   int remote_fd;            // -2 for socket
   unsigned char type;       // type for socket
   unsigned short major;     // domain for socket
-  unsigned short minor;     // protocoal for socket
+  unsigned short minor;     // protocol for socket
 
-  char peer[108];
+  //char peer[108];
 };
 
 enum proc_state {
@@ -82,6 +82,8 @@ struct sockaddr_un * process_get_peer_addr(pid_t pid);
 
 pid_t process_setsid(pid_t pid);
 pid_t process_getsid(pid_t pid);
+
+int process_dup(pid_t pid, int fd, int new_fd);
 
 void dump_processes();
 

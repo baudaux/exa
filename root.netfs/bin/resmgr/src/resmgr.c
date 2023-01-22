@@ -516,6 +516,8 @@ int main() {
       if (msg->_u.setsid_msg.sid < 0)
 	msg->_errno = EPERM;
 
+      emscripten_log(EM_LOG_CONSOLE, "SETSID --> %d", msg->_u.setsid_msg.sid);
+
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       
     }
@@ -523,12 +525,17 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "GETSID from %d", msg->pid);
 
-      msg->_u.setsid_msg.sid = process_getsid(msg->pid);
+      if (msg->_u.getsid_msg.pid == 0)
+	msg->_u.getsid_msg.sid = process_getsid(msg->pid);
+      else
+	msg->_u.getsid_msg.sid = process_getsid(msg->_u.getsid_msg.pid);
+
+      //dump_processes();
       
       msg->msg_id |= 0x80;
       msg->_errno = 0;
 
-      if (msg->_u.setsid_msg.sid < 0)
+      if (msg->_u.getsid_msg.sid < 0)
 	msg->_errno = EPERM;
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
@@ -564,6 +571,18 @@ int main() {
 	execve_size = bytes_rec;
 	memcpy(execve_msg, msg, bytes_rec);
       }
+    }
+    else if (msg->msg_id == DUP) {
+
+      emscripten_log(EM_LOG_CONSOLE, "DUP from %d", msg->pid);
+
+      msg->_u.dup_msg.new_fd = process_dup(msg->pid, msg->_u.dup_msg.fd, msg->_u.dup_msg.new_fd);
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      
     }
   }
   
