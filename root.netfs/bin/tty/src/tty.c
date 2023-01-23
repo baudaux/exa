@@ -69,7 +69,7 @@ int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned shor
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_open");
+  emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
 
   ++last_fd;
 

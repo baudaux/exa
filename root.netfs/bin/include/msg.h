@@ -39,6 +39,9 @@ enum message_id {
   FCNTL,
   GETSID,
   DUP,
+  GETPPID = 20,
+  GETPGID,
+  SETPGID,
 };
 
 enum dev_type {
@@ -142,6 +145,17 @@ struct dup_message {
   int new_fd;
 };
 
+struct getpgid_message {
+
+  pid_t pid;
+  pid_t pgid;
+};
+
+struct getppid_message {
+
+  pid_t ppid;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -166,6 +180,8 @@ struct message {
     struct fork_message fork_msg;
     struct execve_message execve_msg;
     struct dup_message dup_msg;
+    struct getpgid_message getpgid_msg;
+    struct getppid_message getppid_msg;
     
   } _u;
 };

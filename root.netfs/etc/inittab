@@ -1,3 +1,3 @@
 # inittab pour linux
 id:2:initdefault:
-1:12345:respawn:/bin/mingetty tty1 --autologin axel
+1:12345:respawn:/bin/mingetty tty1 --noclear --autologin axel

@@ -57,10 +57,8 @@ struct process {
   mode_t umask;
   sigset_t sigprocmask;
   sigset_t pendingsig;
-
+  
   struct sockaddr_un peer_addr;
-
-  int last_fd;                   // starts at 3, always incremented
   
   struct file_desc fds[NB_FILES_MAX];
 };
@@ -82,6 +80,12 @@ struct sockaddr_un * process_get_peer_addr(pid_t pid);
 
 pid_t process_setsid(pid_t pid);
 pid_t process_getsid(pid_t pid);
+
+pid_t process_getppid(pid_t pid);
+pid_t process_getpgid(pid_t pid);
+int process_setpgid(pid_t pid, pid_t pgid);
+
+int process_set_ctty(pid_t pid, struct vnode * tty);
 
 int process_dup(pid_t pid, int fd, int new_fd);
 

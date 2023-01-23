@@ -246,7 +246,17 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "SOCKET %d %d %d %d", msg->pid, msg->_u.socket_msg.domain, msg->_u.socket_msg.type, msg->_u.socket_msg.protocol);
 
-      msg->_u.socket_msg.fd = process_create_fd(msg->pid, -2, (unsigned char)msg->_u.socket_msg.type, (unsigned short)msg->_u.socket_msg.domain, (unsigned short)msg->_u.socket_msg.protocol);
+      msg->_u.socket_msg.fd = process_create_fd(msg->pid, -2, (unsigned char)(msg->_u.socket_msg.type & 0xff), (unsigned short)(msg->_u.socket_msg.domain & 0xffff), (unsigned short)(msg->_u.socket_msg.protocol & 0xffff));
+
+      if (msg->_u.socket_msg.type & SOCK_CLOEXEC) {
+
+	// TODO
+      }
+
+      if (msg->_u.socket_msg.type & SOCK_NONBLOCK) {
+
+	// TODO
+      }
 
       emscripten_log(EM_LOG_CONSOLE, "SOCKET created %d", msg->_u.socket_msg.fd);
 
@@ -344,6 +354,14 @@ int main() {
       if (msg->_errno == 0) {
 
 	msg->_u.open_msg.fd = process_create_fd(msg->pid, msg->_u.open_msg.remote_fd, msg->_u.open_msg.type, msg->_u.open_msg.major, msg->_u.open_msg.minor);
+
+	if ( (msg->_u.open_msg.major == 1) && (!(msg->_u.open_msg.flags & O_NOCTTY )) ) {
+
+	  if (process_set_ctty(msg->pid, vfs_get_vnode(0))) {
+
+	    // TODO: send message to driver
+	  }
+	}
       }
 
       // Forward response to process
@@ -582,7 +600,51 @@ int main() {
       msg->_errno = 0;
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+    }
+    else if (msg->msg_id == GETPPID) {
+
+      emscripten_log(EM_LOG_CONSOLE, "GETPPID from %d", msg->pid);
+
+      msg->_u.getppid_msg.ppid = process_getppid(msg->pid);
       
+      //dump_processes();
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr)); 
+    }
+    else if (msg->msg_id == GETPGID) {
+
+      emscripten_log(EM_LOG_CONSOLE, "GETPPID from %d", msg->pid);
+
+      if (msg->_u.getpgid_msg.pid == 0)
+	msg->_u.getpgid_msg.pgid = process_getpgid(msg->pid);
+      else
+	msg->_u.getpgid_msg.pgid = process_getpgid(msg->_u.getsid_msg.pid);
+      
+      //dump_processes();
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr)); 
+    }
+    else if (msg->msg_id == SETPGID) {
+
+      emscripten_log(EM_LOG_CONSOLE, "SETPPID from %d", msg->pid);
+
+      if (msg->_u.getpgid_msg.pid == 0)
+        process_setpgid(msg->pid, msg->_u.getpgid_msg.pgid);
+      else
+        process_setpgid(msg->_u.getpgid_msg.pid, msg->_u.getpgid_msg.pgid);
+      
+      //dump_processes();
+      
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr)); 
     }
   }
   

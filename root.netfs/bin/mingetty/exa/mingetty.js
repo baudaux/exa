@@ -3906,6 +3906,8 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		    //console.log(messageEvent);
   
+  		    Module['fd_table'][fd] = null;
+  
   		    wakeUp(0); // TODO
   
   		    return 0;
@@ -5009,6 +5011,8 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   		    
   		    let new_fd = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
   
+  		    Module['fd_table'][new_fd] = Module['fd_table'][fd];
+  
   		    wakeUp(new_fd);
   
   		    return 0;
@@ -5624,27 +5628,9 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		    Module['rcv_bc_channel'].set_handler(null);
   		    
-  		    console.log(messageEvent);
+  		    //console.log(messageEvent);
   
   		    let msg2 = messageEvent.data;
-  		    
-  		    /*if (first_response) { // first response comes from resmgr
-  
-  			first_response = false;
-  
-  			msg2.buf[0] = 11;
-  
-  			msg2.from = open_name;
-  
-  			let peer = UTF8ArrayToString(msg2.buf, 26, 108);
-  
-  			console.log("forward to "+peer);
-  			
-  			let open_driver_bc = new BroadcastChannel(peer);
-  
-  			open_driver_bc.postMessage(msg2);
-  		    }
-  		    else {*/
   
   		    if (msg2.buf[0] == (11|0x80)) {
   
@@ -5661,7 +5647,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   				let minor = msg2.buf[30] | (msg2.buf[31] << 8);
   				let peer = UTF8ArrayToString(msg2.buf, 32, 108);
   
-  				
+  				console.log("__syscall_openat: peer=%s", peer);
   
   				// create our internal socket structure
   				var desc = {
@@ -5712,6 +5698,8 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   		Module._free(buf);
   	    }
   	});
+  
+  	//console.log("openat: ret="+ret);
   
   	return ret;
   	
@@ -6106,6 +6094,9 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	    buf2[5] = (pid >> 8) & 0xff;
   	    buf2[6] = (pid >> 16) & 0xff;
   	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    //console.log(Module['fd_table']);
+  	    //console.log("fd="+fd);
   
   	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
   
@@ -6979,27 +6970,6 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   }
   }
 
-  function _fd_fdstat_get(fd, pbuf) {
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      // All character devices are terminals (other things a Linux system would
-      // assume is a character device, like the mouse, we have special APIs for).
-      var type = stream.tty ? 2 :
-                 FS.isDir(stream.mode) ? 3 :
-                 FS.isLink(stream.mode) ? 7 :
-                 4;
-      HEAP8[((pbuf)>>0)] = type;
-      // TODO HEAP16[(((pbuf)+(2))>>1)] = ?;
-      // TODO (tempI64 = [?>>>0,(tempDouble=?,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((pbuf)+(8))>>2)] = tempI64[0],HEAP32[(((pbuf)+(12))>>2)] = tempI64[1]);
-      // TODO (tempI64 = [?>>>0,(tempDouble=?,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((pbuf)+(16))>>2)] = tempI64[0],HEAP32[(((pbuf)+(20))>>2)] = tempI64[1]);
-      return 0;
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
-    return e.errno;
-  }
-  }
-
   function convertI32PairToI53Checked(lo, hi) {
       assert(lo == (lo >>> 0) || lo == (lo|0)); // lo should either be a i32 or a u32
       assert(hi === (hi|0));                    // hi should be a i32
@@ -7421,7 +7391,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_open","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -7849,7 +7819,6 @@ var asmLibraryArg = {
   "environ_get_count": environ_get_count,
   "exit": _exit,
   "fd_close": _fd_close,
-  "fd_fdstat_get": _fd_fdstat_get,
   "fd_seek": _fd_seek,
   "strftime": _strftime
 };
@@ -7940,8 +7909,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 5596;
-var ___stop_em_js = Module['___stop_em_js'] = 6214;
+var ___start_em_js = Module['___start_em_js'] = 5612;
+var ___stop_em_js = Module['___stop_em_js'] = 6230;
 
 
 

@@ -190,6 +190,7 @@ static void open_tty (void)
 		error ("%s: cannot open tty: %s", tty, strerror (errno));
 	if (ioctl (fd, TIOCSCTTY, (void *) 1) == -1)
 		error ("%s: no controlling tty: %s", tty, strerror (errno));
+
 	if (!isatty (fd))
 		error ("%s: not a tty", tty);
 
@@ -202,23 +203,32 @@ static void open_tty (void)
 		close (1);
 		close (0);
 		close (fd);
-		if ((fd = open (buf, O_RDWR, 0)) != 0)
+
+		if ((fd = open (buf, O_RDWR, 0)) != 0) {
 			error ("%s: cannot open tty: %s", tty,
 				strerror (errno));
-		if (ioctl (fd, TIOCSCTTY, (void *) 1) == -1)
+		}
+		
+		if (ioctl (fd, TIOCSCTTY, (void *) 1) == -1) {
 			error ("%s: no controlling tty: %s", tty,
 				strerror (errno));
+		}
 	}
+
 	/* Set up stdin/stdout/stderr. */
 	if (dup2 (fd, 0) != 0 || dup2 (fd, 1) != 1 || dup2 (fd, 2) != 2)
 		error ("%s: dup2(): %s", tty, strerror (errno));
 	if (fd > 2)
 		close (fd);
 
+	emscripten_log(EM_LOG_CONSOLE, "open_tty 7");
+
 	/* Write a reset string to the terminal. This is very linux-specific
 	   and should be checked for other systems. */
 	if (noclear == 0)
 		write (0, "\033c", 2);
+
+	emscripten_log(EM_LOG_CONSOLE, "open_tty 8");
 
 	sigaction (SIGHUP, &sa_old, NULL);
 
@@ -437,6 +447,7 @@ int main (int argc, char **argv)
 		tty += 5;
 
 	update_utmp ();
+
 	if (delay)
 		sleep (delay);
 	open_tty ();

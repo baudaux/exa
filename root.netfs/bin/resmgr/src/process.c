@@ -187,11 +187,7 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
   processes[pid].peer_addr.sun_family = AF_UNIX;
   sprintf(processes[pid].peer_addr.sun_path, "channel.process.%d", pid);
 
-  processes[pid].last_fd = 2;
-
   if (ppid > 0) {
-
-    processes[pid].last_fd = processes[ppid].last_fd;
 
     for (int i = 0; i < NB_FILES_MAX; ++i) {
 
@@ -222,6 +218,26 @@ void dump_processes() {
   }
 }
 
+int process_find_smallest_fd(pid_t pid) {
+
+  int i, j;
+
+  for (i = 0; i < NB_FILES_MAX; ++i) {
+
+    for (j = 0; j < NB_FILES_MAX; ++j) {
+
+      if (processes[pid].fds[i].fd == i) {
+	break;
+      }
+    }
+    
+    if (j >= NB_FILES_MAX) // i is not found, it is the smallest available
+      return i;
+  }
+
+  return -1;
+}
+
 int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned short major, unsigned short minor) {
   
   int i;
@@ -235,17 +251,17 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
   if (i >= NB_FILES_MAX)
     return -1;
 
-  processes[pid].last_fd++;
+  int fd = process_find_smallest_fd(pid);
 
-  processes[pid].fds[i].fd = processes[pid].last_fd;
+  processes[pid].fds[i].fd = fd;
   processes[pid].fds[i].remote_fd = remote_fd;
   processes[pid].fds[i].type = type;
   processes[pid].fds[i].major = major;
   processes[pid].fds[i].minor = minor;
 
-  //emscripten_log(EM_LOG_CONSOLE,"process_create_fd: %d, %d, %d (%d)", pid, remote_fd, processes[pid].last_fd, i);
+  //emscripten_log(EM_LOG_CONSOLE,"process_create_fd: %d, %d, %d", pid, remote_fd, fd);
 
-  return processes[pid].last_fd;
+  return fd;
 }
 
 int process_get_fd(pid_t pid, int fd, unsigned char * type, unsigned short * major, int * remote_fd) {
@@ -333,6 +349,8 @@ pid_t process_setsid(pid_t pid) {
     processes[pid].pgid = pid;
     processes[pid].sid = pid;
     processes[pid].term = NULL;
+
+    // TODO inform tty driver
     
     return pid;
   }
@@ -343,6 +361,49 @@ pid_t process_setsid(pid_t pid) {
 pid_t process_getsid(pid_t pid) {
   
   return processes[pid].sid;
+}
+
+pid_t process_getppid(pid_t pid) {
+
+  return processes[pid].ppid;
+}
+
+pid_t process_getpgid(pid_t pid) {
+
+  return processes[pid].pgid;
+}
+
+int process_setpgid(pid_t pid, pid_t pgid) {
+
+  if (pgid == 0) {
+
+    processes[pid].pgid = pid;
+    return 0;
+  }
+
+  pid_t i = process_group_exists(pgid);
+
+  if (!i)
+    return -1;
+
+  if (processes[pid].sid != processes[i].sid)
+    return -1;
+
+  processes[pid].pgid = pgid;
+
+  return 0;
+}
+
+int process_set_ctty(pid_t pid, struct vnode * tty) {
+
+  if (processes[pid].term)
+    return 0;
+
+  emscripten_log(EM_LOG_CONSOLE,"process_set_ctty: %d %x", pid, tty);
+  
+  processes[pid].term = tty;
+
+  return 1;
 }
 
 int process_dup(pid_t pid, int fd, int new_fd) {
@@ -368,14 +429,12 @@ int process_dup(pid_t pid, int fd, int new_fd) {
 
       process_close_fd(pid, new_fd);
 
-      // TODO: close on dirver side
+      // TODO inform tty driver
     }
   }
   else {
-
-    processes[pid].last_fd++;
-
-    new_fd = processes[pid].last_fd;
+    
+    new_fd = process_find_smallest_fd(pid);
   }
   
   int j;
