@@ -189,6 +189,9 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
   if (ppid > 0) {
 
+    for (int i = 0; i < (NB_FILES_MAX/8+1); ++i)
+      processes[pid].fd_map[i] = processes[ppid].fd_map[i];
+    
     for (int i = 0; i < NB_FILES_MAX; ++i) {
 
       if (processes[ppid].fds[i].fd >= 0) {
@@ -201,6 +204,11 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 	//strcpy(processes[pid].fds[i].peer, processes[ppid].fds[i].peer);
       }
     }
+  }
+  else {
+
+    for (int i = 0; i < (NB_FILES_MAX/8+1); ++i)
+      processes[pid].fd_map[i] = 0;
   }
   
   ++nb_processes;
@@ -224,14 +232,7 @@ int process_find_smallest_fd(pid_t pid) {
 
   for (i = 0; i < NB_FILES_MAX; ++i) {
 
-    for (j = 0; j < NB_FILES_MAX; ++j) {
-
-      if (processes[pid].fds[i].fd == i) {
-	break;
-      }
-    }
-    
-    if (j >= NB_FILES_MAX) // i is not found, it is the smallest available
+    if ((processes[pid].fd_map[i/8] & 1 << (i%8)) == 0)
       return i;
   }
 
@@ -252,6 +253,8 @@ int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned sho
     return -1;
 
   int fd = process_find_smallest_fd(pid);
+
+  processes[pid].fd_map[fd/8] |= (1 << (fd%8));
 
   processes[pid].fds[i].fd = fd;
   processes[pid].fds[i].remote_fd = remote_fd;
@@ -291,6 +294,8 @@ int process_close_fd(pid_t pid, int fd) {
     if (processes[pid].fds[i].fd == fd) {
 
       processes[pid].fds[i].fd = -1;
+      
+      processes[pid].fd_map[fd/8] &= ~(1 << (fd%8));
 
       //emscripten_log(EM_LOG_CONSOLE,"process_close_fd: %d, %d (%i)", pid, fd, i);
       
@@ -453,6 +458,8 @@ int process_dup(pid_t pid, int fd, int new_fd) {
   processes[pid].fds[j].type = processes[pid].fds[i].type;
   processes[pid].fds[j].major = processes[pid].fds[i].major;
   processes[pid].fds[j].minor = processes[pid].fds[i].minor;
+
+  processes[pid].fd_map[new_fd/8] |= (1 << (new_fd%8));
   
   return new_fd;
 }

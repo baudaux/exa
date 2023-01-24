@@ -95,9 +95,6 @@ static void error (const char *fmt, ...)
 /* update_utmp() - update our utmp entry */
 static void update_utmp (void)
 {
-
-  emscripten_log(EM_LOG_CONSOLE, "--> update_utmp");
-  
 	struct utmp ut;
 	struct utmp *utp;
 	time_t cur_time;
@@ -132,16 +129,11 @@ static void update_utmp (void)
 	endutent ();
 
 	updwtmp (_PATH_WTMP, &ut);
-
-	emscripten_log(EM_LOG_CONSOLE, "<-- update_utmp");
 }
 
 /* open_tty - set up tty as standard { input, output, error } */
 static void open_tty (void)
 {
-
-  emscripten_log(EM_LOG_CONSOLE, "--> open_tty");
-  
 	struct sigaction sa, sa_old;
 	char buf[40];
 	int fd;
@@ -221,18 +213,12 @@ static void open_tty (void)
 	if (fd > 2)
 		close (fd);
 
-	emscripten_log(EM_LOG_CONSOLE, "open_tty 7");
-
 	/* Write a reset string to the terminal. This is very linux-specific
 	   and should be checked for other systems. */
 	if (noclear == 0)
 		write (0, "\033c", 2);
 
-	emscripten_log(EM_LOG_CONSOLE, "open_tty 8");
-
 	sigaction (SIGHUP, &sa_old, NULL);
-
-	emscripten_log(EM_LOG_CONSOLE, "<-- open_tty");
 }
 
 static void output_special_char (unsigned char c)
@@ -316,17 +302,20 @@ static void do_prompt (int showlogin)
 		putchar ('\n');
 	if (noissue == 0 && (fd = fopen ("/etc/issue", "r"))) {
 		while ((c = getc (fd)) != EOF) {
-			if (c == '\\')
+
+		  	if (c == '\\')
 				output_special_char (getc (fd));
 			else
 				putchar (c);
 		}
+
 		fclose (fd);
 	}
 	if (nohostname == 0)
 		printf ("%s ", hn);
 	if (showlogin)
 		printf ("login: ");
+
 	fflush (stdout);
 }
 
@@ -400,8 +389,6 @@ int main (int argc, char **argv)
 	hn[MAXHOSTNAMELEN] = '\0';
 	pid = getpid ();
 	sid = getsid (0);
-
-	emscripten_log(EM_LOG_CONSOLE, "mingetty: pid=%d sid=%d", pid, sid);
 	
 #if	defined(s390) || defined(__s390__)
 	putenv ("TERM=dumb");

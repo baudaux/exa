@@ -58,7 +58,7 @@ static unsigned short minor = 0;
 
 static struct device_ops * devices[NB_NETFS_MAX];
 
-static int last_fd = -1;
+static int last_fd = 0;
 
 static struct fd_entry fds[64];
 
@@ -167,7 +167,7 @@ static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, 
     
     add_fd_entry(last_fd, pid, minor, pathname, flags, mode, size);
 
-    emscripten_log(EM_LOG_CONSOLE,"netfs_open -> %d %d %d", last_fd, pid, minor);
+    emscripten_log(EM_LOG_CONSOLE,"netfs_open -> %d %d %d %d %d", last_fd, pid, minor, size, fds[last_fd].offset);
   
     return last_fd;
   }
@@ -185,6 +185,8 @@ static ssize_t netfs_read(int fd, void * buf, size_t count) {
   }
   
   int size = do_fetch(fds[fd].pathname, fds[fd].offset, buf, count);
+
+  emscripten_log(EM_LOG_CONSOLE,"netfs_read: %d bytes", size);
 
   if (size >= 0) {
 
@@ -208,6 +210,8 @@ static int netfs_ioctl(int fildes, int request, ... /* arg */) {
 }
 
 static int netfs_close(int fd) {
+
+  
 
   return 0;
 }
@@ -354,16 +358,16 @@ int main() {
     
     else if (msg->msg_id == OPEN) {
 
-      int fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
+      int remote_fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
       if (fd >= 0) {
 
-	msg->_u.open_msg.fd = fd;
+	msg->_u.open_msg.remote_fd = remote_fd;
 	msg->_errno = 0;
       }
       else {
 
-	msg->_u.open_msg.fd = -1;
+	msg->_u.open_msg.remote_fd = -1;
 	msg->_errno = ENOENT;
       }
       
@@ -405,7 +409,9 @@ int main() {
     }
     else if (msg->msg_id == CLOSE) {
 
-      
+      msg->_errno = get_device(msg->_u.open_msg.minor)->close(msg->_u.close_msg.fd);
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
   }
 

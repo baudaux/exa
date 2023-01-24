@@ -61,6 +61,8 @@ struct process {
   struct sockaddr_un peer_addr;
   
   struct file_desc fds[NB_FILES_MAX];
+
+  unsigned char fd_map[NB_FILES_MAX/8+1];
 };
 
 void process_init();

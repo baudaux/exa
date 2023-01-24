@@ -53,7 +53,7 @@ static unsigned short minor = 0;
 
 static struct device_ops * devices[NB_TTY_MAX];
 
-static int last_fd = -1;
+static int last_fd = 0;
 
 static struct client clients[64];
 

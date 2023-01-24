@@ -59,7 +59,8 @@
 #endif
 
 #include <netdb.h>
-#include <security/pam_appl.h>
+//BB
+//#include <security/pam_appl.h>
 
 #ifdef HAVE_SECURITY_PAM_MISC_H
 # include <security/pam_misc.h>
