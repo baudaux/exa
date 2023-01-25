@@ -46,7 +46,9 @@ window.probe_term = function(e) {
 	let msg = {
 
 	    type: 0,
-	    data: "Terminal probed"
+	    data: "Terminal probed",
+	    rows: window.term.rows,
+	    cols: window.term.cols,
 	};
 
 	window.term.postMessage(msg);

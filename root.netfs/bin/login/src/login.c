@@ -47,6 +47,8 @@
 #include <pwd.h>
 #include <utmpx.h>
 
+#include "../../../packages/util-linux/config.h"
+
 #ifdef HAVE_LASTLOG_H
 # include <lastlog.h>
 #endif
@@ -58,11 +60,13 @@
 # include <linux/major.h>
 #endif
 
+extern char ** environ;
+
 #include <netdb.h>
 //BB
 //#include <security/pam_appl.h>
 
-#ifdef HAVE_SECURITY_PAM_MISC_H
+/*#ifdef HAVE_SECURITY_PAM_MISC_H
 # include <security/pam_misc.h>
 #elif defined(HAVE_SECURITY_OPENPAM_H)
 # include <security/openpam.h>
@@ -70,7 +74,8 @@
 
 #ifdef HAVE_LIBAUDIT
 # include <libaudit.h>
-#endif
+#endif*/
+
 
 #include "c.h"
 #include "pathnames.h"
@@ -85,6 +90,12 @@
 #include "pwdutils.h"
 
 #include "logindefs.h"
+
+typedef unsigned long pam_handle_t;
+
+struct pam_conv {
+
+};
 
 #define LOGIN_MAX_TRIES        3
 #define LOGIN_EXIT_TIMEOUT     5

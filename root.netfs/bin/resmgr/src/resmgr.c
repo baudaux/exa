@@ -33,33 +33,6 @@
 #define RESMGR_FILE "resmgr.peer"
 #define RESMGR_PATH RESMGR_ROOT "/" RESMGR_FILE
 
-static char * starting_exa =  "\r\n"
-"              ...                ...              \r\n"
-"            .0O0O:'.':..,,,...;'';O0:.            \r\n"
-"            0Oo0...'....;.,..'.....0OP.           \r\n"
-"            lP:..;..,._....._.,.;..o0p.           \r\n"
-"            '........,e),.,(e,....,..i            \r\n"
-"             l,..;.....,aaa,..,...;..j            \r\n"
-"             i.....(-;:aaaaa;;-):...l             \r\n"
-"              (,..:.((..aaa..))..;..)             \r\n"
-"               ;......(((O)))..:...!              \r\n"
-"       ..'.....'..exa.:.',':.;:os'.:...',,'.      \r\n"
-"    ,ldxkxo:...'...';:;axel:':;.;.;...'lkkkxl;.   \r\n"
-"  .:00Okxxxd:....,..,..;......'....:..:k00OOOk,,  \r\n"
-"  ;.0Okxxxxdo'.,..,..'....:.....;.:...:OKK00Ok,:. \r\n"
-"  .:OOkxxdlc,...'..;....'....'..,:..  .;okOOO.;,  \r\n"
-"    ';:;,..   ......'..,.;.'..,.,:...    ..''..   \r\n"
-"             .;,'...:...,...:......,;.            \r\n"
-"            .odl:;,'',,'',''.'..,;clo:.           \r\n"
-"           .cxdooolc:;;       ;:cloddddc,'..      \r\n" 
-"         .,cdddooool:;        ;ldkkkkkkkkdl,.     \r\n"
-"       ,oxxdddddddd:.          ,dO000O00Okxd:.    \r\n"
-"      ;kOkddddddddo'            :k0K00K00OOkx,    \r\n"
-"      l;;;:;;;:xodo            .lO;,:;:;,:;:0'    \r\n"
-"      .;,:;:;,:;:.              .;,:;:;,:;:l.     \r\n"
-"        .,..,..,                   ';:::,.        \r\n"
-  "\r\n";
-
 int main() {
 
   int sock;
@@ -143,23 +116,6 @@ int main() {
       if ( (msg->_u.dev_msg.dev_type == CHR_DEV) && (msg->_u.dev_msg.major == 1) && (msg->_u.dev_msg.minor == 1) ) {  // First device is tty
 
 	memcpy(&tty_addr, &remote_addr, sizeof(remote_addr));
-
-	for (int i = 0; i < strlen(starting_exa); ) {
-	
-	  memset(buf, 0, 1256);
-	  msg->msg_id = WRITE;
-	  msg->_u.io_msg.fd = -1; // minor == 1
-
-	  int len = (strlen(starting_exa+i) < 1200)?strlen(starting_exa+i):1200;
-	  msg->_u.io_msg.len = len;
-
-	  strncpy((char *)msg->_u.io_msg.buf, starting_exa+i, len);
-	  ((char *)msg->_u.io_msg.buf)[len] = 0;
-
-	  i += len;
-
-	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
-	}
 
 	create_netfs_process();
       }

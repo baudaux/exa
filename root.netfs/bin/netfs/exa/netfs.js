@@ -7144,7 +7144,7 @@ dependenciesFulfilled = function runCaller() {
 
     Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
 
-    console.log("rcv_bc_channel created");
+    //console.log("rcv_bc_channel created");
 
     Module['rcv_bc_channel'].default_handler = (messageEvent) => {
 

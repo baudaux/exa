@@ -102,6 +102,8 @@ struct ioctl_message {
   
   int fd;
   int op;
+  unsigned long len;
+  unsigned char buf[];
 };
 
 struct fcntl_message {

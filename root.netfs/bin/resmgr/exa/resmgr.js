@@ -6776,8 +6776,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 4152;
-var ___stop_em_js = Module['___stop_em_js'] = 4770;
+var ___start_em_js = Module['___start_em_js'] = 2900;
+var ___stop_em_js = Module['___stop_em_js'] = 3518;
 
 
 
@@ -7184,7 +7184,7 @@ dependenciesFulfilled = function runCaller() {
 
     Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
 
-    console.log("rcv_bc_channel created");
+    //console.log("rcv_bc_channel created");
 
     Module['rcv_bc_channel'].default_handler = (messageEvent) => {
 

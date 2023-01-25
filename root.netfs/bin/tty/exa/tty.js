@@ -1209,12 +1209,10 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  3027: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = UTF8ToString($0, $1); Module["term_channel"].port1.postMessage(msg); }
+  2539: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = Module.HEAPU8.slice($0,$0+$1); Module["term_channel"].port1.postMessage(msg); },  
+ 2660: ($0) => { Module.HEAPU8[$0] = Module["term_channel"].rows & 0xff; Module.HEAPU8[$0+1] = (Module["term_channel"].rows >> 8) & 0xff; Module.HEAPU8[$0+2] = Module["term_channel"].cols & 0xff; Module.HEAPU8[$0+3] = (Module["term_channel"].cols >> 8) & 0xff; }
 };
-function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]\n\r"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
-function environ_get_count() { if (Module['env']) { return Module['env'].count; } return 0; }
-function environ_get_buf_size() { if (Module['env']) { return Module['env'].size; } return 0; }
-function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['env'].buf, buf); let count = 0; for (let i = 0; i < Module['env'].size;) { if (count >= Module['env'].count) break; Module.HEAPU8[env+4*count] = (buf+i) & 0xff; Module.HEAPU8[env+4*count+1] = ((buf+i) >> 8) & 0xff; Module.HEAPU8[env+4*count+2] = ((buf+i) >> 16) & 0xff; Module.HEAPU8[env+4*count+3] = ((buf+i) >> 24) & 0xff; let j = 0; for (; Module.HEAPU8[buf+i+j]; j++) ; i += j+1; count++; } } }
+function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { Module["term_channel"].rows = e.data.rows; Module["term_channel"].cols = e.data.cols; let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
 
 
 
@@ -6447,9 +6445,6 @@ var asmLibraryArg = {
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
-  "environ_get": environ_get,
-  "environ_get_buf_size": environ_get_buf_size,
-  "environ_get_count": environ_get_count,
   "probe_terminal": probe_terminal
 };
 Asyncify.instrumentWasmImports(asmLibraryArg);
@@ -6519,6 +6514,9 @@ var dynCall_iiiiii = Module["dynCall_iiiiii"] = createExportWrapper("dynCall_iii
 var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
 
 /** @type {function(...*):?} */
+var dynCall_iiiii = Module["dynCall_iiiii"] = createExportWrapper("dynCall_iiiii");
+
+/** @type {function(...*):?} */
 var dynCall_ii = Module["dynCall_ii"] = createExportWrapper("dynCall_ii");
 
 /** @type {function(...*):?} */
@@ -6539,8 +6537,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1928;
-var ___stop_em_js = Module['___stop_em_js'] = 3027;
+var ___start_em_js = Module['___start_em_js'] = 1976;
+var ___stop_em_js = Module['___stop_em_js'] = 2539;
 
 
 
@@ -6946,7 +6944,7 @@ dependenciesFulfilled = function runCaller() {
 
     Module['rcv_bc_channel'] = new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
 
-    console.log("rcv_bc_channel created");
+    //console.log("rcv_bc_channel created");
 
     Module['rcv_bc_channel'].default_handler = (messageEvent) => {
 
