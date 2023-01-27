@@ -669,10 +669,10 @@ function updateGlobalBufferAndViews(buf) {
   Module['HEAPF64'] = HEAPF64 = new Float64Array(buf);
 }
 
-var TOTAL_STACK = 32768;
+var TOTAL_STACK = 65536;
 if (Module['TOTAL_STACK']) assert(TOTAL_STACK === Module['TOTAL_STACK'], 'the stack size can no longer be determined at runtime')
 
-var INITIAL_MEMORY = Module['INITIAL_MEMORY'] || 65536;legacyModuleProp('INITIAL_MEMORY', 'INITIAL_MEMORY');
+var INITIAL_MEMORY = Module['INITIAL_MEMORY'] || 131072;legacyModuleProp('INITIAL_MEMORY', 'INITIAL_MEMORY');
 
 assert(INITIAL_MEMORY >= TOTAL_STACK, 'INITIAL_MEMORY should be larger than TOTAL_STACK, was ' + INITIAL_MEMORY + '! (TOTAL_STACK=' + TOTAL_STACK + ')');
 
@@ -682,7 +682,7 @@ assert(typeof Int32Array != 'undefined' && typeof Float64Array !== 'undefined' &
 
 // If memory is defined in wasm, the user can't provide it.
 assert(!Module['wasmMemory'], 'Use of `wasmMemory` detected.  Use -sIMPORTED_MEMORY to define wasmMemory externally');
-assert(INITIAL_MEMORY == 65536, 'Detected runtime INITIAL_MEMORY setting.  Use -sIMPORTED_MEMORY to define wasmMemory dynamically');
+assert(INITIAL_MEMORY == 131072, 'Detected runtime INITIAL_MEMORY setting.  Use -sIMPORTED_MEMORY to define wasmMemory dynamically');
 
 // include: runtime_init_table.js
 // In regular non-RELOCATABLE mode the table is exported
@@ -1101,7 +1101,7 @@ function createWasm() {
     // This assertion doesn't hold when emscripten is run in --post-link
     // mode.
     // TODO(sbc): Read INITIAL_MEMORY out of the wasm file in post-link mode.
-    //assert(wasmMemory.buffer.byteLength === 65536);
+    //assert(wasmMemory.buffer.byteLength === 131072);
     updateGlobalBufferAndViews(wasmMemory.buffer);
 
     wasmTable = Module['asm']['__indirect_function_table'];
@@ -1209,10 +1209,10 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  2539: ($0, $1) => { let msg = {}; msg.type = 2; msg.data = Module.HEAPU8.slice($0,$0+$1); Module["term_channel"].port1.postMessage(msg); },  
- 2660: ($0) => { Module.HEAPU8[$0] = Module["term_channel"].rows & 0xff; Module.HEAPU8[$0+1] = (Module["term_channel"].rows >> 8) & 0xff; Module.HEAPU8[$0+2] = Module["term_channel"].cols & 0xff; Module.HEAPU8[$0+3] = (Module["term_channel"].cols >> 8) & 0xff; }
+  
 };
-function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { Module["term_channel"] = new MessageChannel(); Module["term_channel"].port1.onmessage = (e) => { console.log("Message from Terminal: "+JSON.stringify(e.data)); if (e.data.type == 0) { Module["term_channel"].rows = e.data.rows; Module["term_channel"].cols = e.data.cols; let msg = {}; msg.type = 2; msg.data = "[tty v0.1.0]"; Module["term_channel"].port1.postMessage(msg); wakeUp(0); } }; let msg = { }; msg.type = 0; window.parent.postMessage(msg, '*', [Module["term_channel"].port2]); }); return ret; }
+function probe_terminal() { let buf_size = 256; let buf = new Uint8Array(buf_size); buf[0] = 23; let msg = { from: "/var/tty.peer", buf: buf, len: buf_size }; let bc = Module.get_broadcast_channel("/dev/tty1"); bc.postMessage(msg); }
+function write_terminal(buf,len) { let msg = { from: "/var/tty.peer", write: 1, buf: Module.HEAPU8.slice(buf, buf+len), len: len }; let bc = Module.get_broadcast_channel("/dev/tty1"); bc.postMessage(msg); return len; }
 
 
 
@@ -3870,13 +3870,11 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   	      let wait_bind = true;
   
   	      sock.name = addr;
-  	      
+  
   	      sock.bc = new BroadcastChannel(addr);
   	      
   	      sock.bc.onmessage = (messageEvent) => {
   
-  		  //console.log(messageEvent);
-  		  
   		  if (wait_bind) {
   
   		      wait_bind = false;
@@ -5263,38 +5261,6 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   }
   }
 
-  var readAsmConstArgsArray = [];
-  function readAsmConstArgs(sigPtr, buf) {
-      // Nobody should have mutated _readAsmConstArgsArray underneath us to be something else than an array.
-      assert(Array.isArray(readAsmConstArgsArray));
-      // The input buffer is allocated on the stack, so it must be stack-aligned.
-      assert(buf % 16 == 0);
-      readAsmConstArgsArray.length = 0;
-      var ch;
-      // Most arguments are i32s, so shift the buffer pointer so it is a plain
-      // index into HEAP32.
-      buf >>= 2;
-      while (ch = HEAPU8[sigPtr++]) {
-        var chr = String.fromCharCode(ch);
-        var validChars = ['d', 'f', 'i'];
-        assert(validChars.includes(chr), 'Invalid character ' + ch + '("' + chr + '") in readAsmConstArgs! Use only [' + validChars + '], and do not specify "v" for void return argument.');
-        // Floats are always passed as doubles, and doubles and int64s take up 8
-        // bytes (two 32-bit slots) in memory, align reads to these:
-        buf += (ch != 105/*i*/) & buf;
-        readAsmConstArgsArray.push(
-          ch == 105/*i*/ ? HEAP32[buf] :
-         HEAPF64[buf++ >> 1]
-        );
-        ++buf;
-      }
-      return readAsmConstArgsArray;
-    }
-  function _emscripten_asm_const_int(code, sigPtr, argbuf) {
-      var args = readAsmConstArgs(sigPtr, argbuf);
-      if (!ASM_CONSTS.hasOwnProperty(code)) abort('No EM_ASM constant found at address ' + code);
-      return ASM_CONSTS[code].apply(null, args);
-    }
-
   function reallyNegative(x) {
       return x < 0 || (x === 0 && (1/x) === -Infinity);
     }
@@ -6039,7 +6005,7 @@ function probe_terminal() { let ret = Asyncify.handleSleep(function (wakeUp) { M
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.probe_terminal","env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -6441,11 +6407,11 @@ var asmLibraryArg = {
   "__syscall_recvfrom": ___syscall_recvfrom,
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_socket": ___syscall_socket,
-  "emscripten_asm_const_int": _emscripten_asm_const_int,
   "emscripten_log": _emscripten_log,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
-  "probe_terminal": probe_terminal
+  "probe_terminal": probe_terminal,
+  "write_terminal": write_terminal
 };
 Asyncify.instrumentWasmImports(asmLibraryArg);
 var asm = createWasm();
@@ -6537,8 +6503,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 1976;
-var ___stop_em_js = Module['___stop_em_js'] = 2539;
+var ___start_em_js = Module['___start_em_js'] = 1996;
+var ___stop_em_js = Module['___stop_em_js'] = 2440;
 
 
 
@@ -6799,6 +6765,7 @@ var missingLibrarySymbols = [
   'emscripten_realloc_buffer',
   'getHostByName',
   'convertPCtoSourceLocation',
+  'readAsmConstArgs',
   'mainThreadEM_ASM',
   'jstoi_s',
   'getExecutableName',

@@ -27,26 +27,34 @@
 
 #include <emscripten.h>
 
-#define TTY_VERSION "tty v0.1.0"
+#define TTY_VERSION "[tty v0.1.0]"
 
 #define TTY_PATH "/var/tty.peer"
 #define RESMGR_PATH "/var/resmgr.peer"
 
 #define NB_TTY_MAX  16
 
+#define TTY_BUF_SIZE 1024
+
 struct device_ops {
 
   int (*open)(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor);
-  ssize_t (*read)(int fd, void * buf, size_t count);
-  ssize_t (*write)(int fd, const void * buf, size_t nbyte);
+  ssize_t (*read)(int fd, void * buf, size_t len);
+  ssize_t (*write)(int fd, const void * buf, size_t len);
   int (*ioctl)(int fd, int op, unsigned char * buf, size_t len);
   int (*close)(int fd);
+  ssize_t (*enqueue)(int fd, const void * buf, size_t len);
 };
 
 struct device_desc {
 
   struct termios ctrl;
   struct device_ops * ops;
+  struct winsize ws;
+
+  unsigned char buf[TTY_BUF_SIZE]; // circular buffer
+  unsigned long start;
+  unsigned long end;
 };
 
 struct client {
@@ -128,6 +136,43 @@ struct device_desc * get_device_from_fd(int fd) {
   return &devices[clients[fd].minor];
 }
 
+EM_JS(int, probe_terminal, (), {
+
+    let buf_size = 256;
+
+    let buf = new Uint8Array(buf_size);
+    
+    buf[0] = 23; // PROBE_TTY
+
+    let msg = {
+
+       from: "/var/tty.peer",
+       buf: buf,
+       len: buf_size
+    };
+
+    let bc = Module.get_broadcast_channel("/dev/tty1");
+    
+    bc.postMessage(msg);
+  });
+
+EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
+
+    let msg = {
+
+       from: "/var/tty.peer",
+       write: 1,
+       buf: Module.HEAPU8.slice(buf, buf+len),
+       len: len
+    };
+
+    let bc = Module.get_broadcast_channel("/dev/tty1");
+    
+    bc.postMessage(msg);
+
+    return len;
+  });
+
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
   emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
@@ -139,7 +184,7 @@ static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t p
   return last_fd;
 }
 
-static ssize_t local_tty_read(int fd, void * buf, size_t count) {
+static ssize_t local_tty_read(int fd, void * buf, size_t len) {
 
   return 0;
 }
@@ -167,16 +212,8 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
   }
 
   //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: j=%d", j);
-  
-  EM_ASM({
 
-      let msg = {};
-      msg.type = 2;
-      msg.data = Module.HEAPU8.slice($0,$0+$1);
-	  
-      Module["term_channel"].port1.postMessage(msg);
-	  
-    }, tmp_buf, j);
+  write_terminal(tmp_buf, j);
   
   return count;
 }
@@ -188,15 +225,8 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
   switch(op) {
 
   case TIOCGWINSZ:
-
-    EM_ASM({
-
-	Module.HEAPU8[$0] = Module["term_channel"].rows & 0xff;
-	Module.HEAPU8[$0+1] = (Module["term_channel"].rows >> 8) & 0xff;
-	Module.HEAPU8[$0+2] = Module["term_channel"].cols & 0xff;
-	Module.HEAPU8[$0+3] = (Module["term_channel"].cols >> 8) & 0xff;
-	  
-    }, buf, len);
+    
+    memcpy(buf, &(get_device_from_fd(fd)->ws), sizeof(struct winsize));
 
     break;
 
@@ -230,6 +260,19 @@ static int local_tty_close(int fd) {
   return 0;
 }
 
+static ssize_t local_tty_enqueue(int fd, const void * buf, size_t count) {
+
+  emscripten_log(EM_LOG_CONSOLE, "enqueue");
+
+  // TODO: echo if needed
+
+  // TODO: add in circular buffer
+
+  // reply to read if pending read
+  
+  return 0;
+}
+
 static struct device_ops local_tty_ops = {
 
   .open = local_tty_open,
@@ -237,44 +280,8 @@ static struct device_ops local_tty_ops = {
   .write = local_tty_write,
   .ioctl = local_tty_ioctl,
   .close = local_tty_close,
+  .enqueue = local_tty_enqueue,
 };
-
-EM_JS(int, probe_terminal, (), {
-
-    let ret = Asyncify.handleSleep(function (wakeUp) {
-				   
-	Module["term_channel"] = new MessageChannel();
-
-	// Listen for messages on port1
-	Module["term_channel"].port1.onmessage = (e) => {
-
-	  console.log("Message from Terminal: "+JSON.stringify(e.data));
-
-	  if (e.data.type == 0) {
-
-	    Module["term_channel"].rows = e.data.rows;
-	    Module["term_channel"].cols = e.data.cols;
-
-	    let msg = {};
-	      msg.type = 2;
-	      msg.data = "[tty v0.1.0]";
-
-	      Module["term_channel"].port1.postMessage(msg);
-	    
-	    wakeUp(0);
-	  }
-	};
-	   
-	// Transfer port2 to parent window
-
-	let msg = { };
-	msg.type = 0;
-	 
-	window.parent.postMessage(msg, '*', [Module["term_channel"].port2]);
-      });
-
-    return ret;
-});
 
 int main() {
 
@@ -332,23 +339,37 @@ int main() {
       major = msg->_u.dev_msg.major;
 
       emscripten_log(EM_LOG_CONSOLE, "REGISTER_DRIVER successful: major=%d", major);
-
       // Probe terminal
-      if (probe_terminal() == 0) {
+      probe_terminal();
+    }
+    else if (msg->msg_id == (PROBE_TTY|0x80)) {
 
-	minor += 1;
+      emscripten_log(EM_LOG_CONSOLE, "PROBE_TTY successful: rows=%d cols=%d",msg->_u.probe_tty_msg.rows, msg->_u.probe_tty_msg.cols);
+
+      minor += 1;
+
+      get_device(1)->ws.ws_row = msg->_u.probe_tty_msg.rows;
+      get_device(1)->ws.ws_col = msg->_u.probe_tty_msg.cols;
 	
-	register_device(minor, &local_tty_ops);
+      register_device(minor, &local_tty_ops);
 
-	// Terminal probed: minor = 1
-	msg->msg_id = REGISTER_DEVICE;
-	msg->_u.dev_msg.minor = minor;
+      local_tty_write(-1, TTY_VERSION, strlen(TTY_VERSION));
 
-	memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
-	sprintf((char *)&msg->_u.dev_msg.dev_name[0], "tty%d", msg->_u.dev_msg.minor);
+      // Terminal probed: minor = 1
+      msg->msg_id = REGISTER_DEVICE;
+
+      msg->_u.dev_msg.dev_type = CHR_DEV;
+      msg->_u.dev_msg.major = major;
+      msg->_u.dev_msg.minor = minor;
+
+      memset(msg->_u.dev_msg.dev_name, 0, sizeof(msg->_u.dev_msg.dev_name));
+      sprintf((char *)&msg->_u.dev_msg.dev_name[0], "tty%d", msg->_u.dev_msg.minor);
   
-	sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
-      }
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
+    }
+    else if (msg->msg_id == (READ_TTY)) {
+
+      get_device(1)->ops->enqueue(-1, msg->_u.read_tty_msg.buf, msg->_u.read_tty_msg.len);
     }
     else if (msg->msg_id == (REGISTER_DEVICE|0x80)) {
 
@@ -373,12 +394,21 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d", msg->pid);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d", msg->pid);
+
+      int count = get_device_from_fd(msg->_u.io_msg.fd)->ops->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
       
+      if (count > 0) {
+	
+	msg->_u.io_msg.len = count;
+
+	msg->msg_id |= 0x80;
+	sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      }
     }
     else if (msg->msg_id == WRITE) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: WRITE from %d, length=%d", msg->pid, msg->_u.io_msg.len);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: WRITE from %d, length=%d", msg->pid, msg->_u.io_msg.len);
 
       if (msg->_u.io_msg.fd == -1) {
 

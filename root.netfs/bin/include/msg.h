@@ -19,7 +19,7 @@
 #define DEV_NAME_LENGTH_MAX  128
 
 enum message_id {
-
+  
   REGISTER_DRIVER = 1,
   UNREGISTER_DRIVER,
   REGISTER_DEVICE,
@@ -42,6 +42,9 @@ enum message_id {
   GETPPID = 20,
   GETPGID,
   SETPGID,
+  PROBE_TTY,
+  READ_TTY,
+  WRITE_TTY,
 };
 
 enum dev_type {
@@ -158,6 +161,18 @@ struct getppid_message {
   pid_t ppid;
 };
 
+struct probe_tty_message {
+  
+  unsigned short rows;
+  unsigned short cols;
+};
+
+struct read_tty_message {
+  
+  unsigned long len;
+  unsigned char buf[];
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -167,7 +182,7 @@ struct message {
   int _errno;
 
   union {
-
+    
     struct device_message dev_msg;
     struct socket_message socket_msg;
     struct bind_message bind_msg;
@@ -184,6 +199,8 @@ struct message {
     struct dup_message dup_msg;
     struct getpgid_message getpgid_msg;
     struct getppid_message getppid_msg;
+    struct probe_tty_message probe_tty_msg;
+    struct read_tty_message read_tty_msg;
     
   } _u;
 };

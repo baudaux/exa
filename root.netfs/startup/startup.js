@@ -30,14 +30,5 @@ window.addEventListener('message', (event) => {
 	
         document.body.appendChild(iframe);
     }
-    else if (event.data.type == 0) {
-
-	console.log("Probe terminal");
-
-	if (window.probe_term) {
-
-	    window.probe_term(event);
-	}
-    }
 });
 

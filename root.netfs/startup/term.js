@@ -15,48 +15,66 @@ fitAddon.fit();
 
 window.term.onData((data) => {
 
-    let msg = {
+    if (window.term.driver_bc) {
 
-	type: 1,
-	data: data
-    };
+	let uint8Array = window.term.encoder.encode(data); 
 
-    window.term.postMessage(msg);
+	window.term.read_msg.buf.set(uint8Array, 16);
+
+	window.term.read_msg.buf[12] = uint8Array.length & 0xff;
+	window.term.read_msg.buf[13] = (uint8Array.length >> 8) & 0xff;
+	window.term.read_msg.buf[14] = (uint8Array.length >> 16) & 0xff;
+	window.term.read_msg.buf[15] = (uint8Array.length >> 24) & 0xff;
+	
+	window.term.driver_bc.postMessage(window.term.read_msg);
+    }
 });
 
-window.term.onMessage = (e) => {
+window.term.bc = new BroadcastChannel("/dev/tty1");
 
-    if (e.data.type == 2) {
+window.term.read_buf = new Uint8Array(256);
+window.term.read_buf[0] = 24;
 
-	window.term.write(e.data.data);
-    }
+window.term.read_msg = {
+
+    from: "/dev/tty1",
+    buf: window.term.read_buf,
+    len: 256,
 };
 
-window.probe_term = function(e) {
+window.term.encoder = new TextEncoder();
 
-    if (!window.term.postMessage) {
+window.term.bc.onmessage = (messageEvent) => {
 
-	window.term.postMessage = function(msg) {
+    let msg = messageEvent.data;
 
-	    e.ports[0].postMessage(msg);
-	};
-
-	e.ports[0].onmessage = window.term.onMessage;
-
-	let msg = {
-
-	    type: 0,
-	    data: "Terminal probed",
-	    rows: window.term.rows,
-	    cols: window.term.cols,
-	};
-
-	window.term.postMessage(msg);
-
-	return 0;
+    if (msg.write) {
+	
+	window.term.write(msg.buf);
     }
+    else if (msg.buf[0] == 23) {
 
-    return -1;
+	window.term.driver_bc = new BroadcastChannel(msg.from);
+
+	msg.buf[0] |= 0x80;
+
+	// rows
+	msg.buf[12] = window.term.rows & 0xff;
+	msg.buf[13] = (window.term.rows >> 8) & 0xff;
+
+	// cols
+	msg.buf[14] = window.term.cols & 0xff;
+	msg.buf[15] = (window.term.cols >> 8) & 0xff;
+	
+	let msg2 = {
+
+	    from: "/dev/tty1",
+	    buf: msg.buf,
+	    len: msg.buf.length
+	};
+
+	window.term.driver_bc.postMessage(msg2);
+    }
 };
 
 window.term.focus();
