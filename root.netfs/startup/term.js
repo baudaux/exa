@@ -17,7 +17,12 @@ window.term.onData((data) => {
 
     if (window.term.driver_bc) {
 
-	let uint8Array = window.term.encoder.encode(data); 
+	let uint8Array = [];
+
+	for (let c of data)
+	    uint8Array.push(c.charCodeAt(0));
+
+	//window.term.encoder.encode(data);
 
 	window.term.read_msg.buf.set(uint8Array, 16);
 
@@ -42,7 +47,7 @@ window.term.read_msg = {
     len: 256,
 };
 
-window.term.encoder = new TextEncoder();
+//window.term.encoder = new TextEncoder();
 
 window.term.bc.onmessage = (messageEvent) => {
 

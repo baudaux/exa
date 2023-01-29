@@ -335,6 +335,9 @@ static char *get_logname (void)
 					exit (EXIT_SUCCESS);
 				error ("%s: read: %s", tty, strerror (errno));
 			}
+
+			emscripten_log(EM_LOG_CONSOLE,"read: %d", c);
+			
 			if (c == '\n' || c == '\r') {
 				*bp = 0;
 				break;
@@ -347,6 +350,9 @@ static char *get_logname (void)
 				*bp++ = c;
 		}
 	}
+
+	emscripten_log(EM_LOG_CONSOLE,"<-- get_logname: %s", logname);
+	
 	return logname;
 }
 

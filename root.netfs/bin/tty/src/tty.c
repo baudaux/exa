@@ -43,7 +43,15 @@ struct device_ops {
   ssize_t (*write)(int fd, const void * buf, size_t len);
   int (*ioctl)(int fd, int op, unsigned char * buf, size_t len);
   int (*close)(int fd);
-  ssize_t (*enqueue)(int fd, const void * buf, size_t len);
+  ssize_t (*enqueue)(int fd, void * buf, size_t len, struct message * reply_msg);
+};
+
+struct pending_request {
+
+  pid_t pid;
+  int fd;
+  size_t len;
+  struct sockaddr_un client_addr;
 };
 
 struct device_desc {
@@ -55,6 +63,8 @@ struct device_desc {
   unsigned char buf[TTY_BUF_SIZE]; // circular buffer
   unsigned long start;
   unsigned long end;
+
+  struct pending_request read_pending;
 };
 
 struct client {
@@ -73,8 +83,6 @@ static struct device_desc devices[NB_TTY_MAX];
 static int last_fd = 0;
 
 static struct client clients[64];
-
-static unsigned char tmp_buf[4096];
 
 int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned short mode) {
 
@@ -122,6 +130,9 @@ int register_device(unsigned short minor, struct device_ops * dev_ops) {
   devices[minor].ops = dev_ops;
 
   init_ctrl(&devices[minor].ctrl);
+
+  devices[minor].start = 0;
+  devices[minor].end = 0;
 
   return 0;
 }
@@ -173,6 +184,54 @@ EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
     return len;
   });
 
+static int add_char(struct device_desc * dev, unsigned char c) {
+
+  int end2 = (dev->end+1)%TTY_BUF_SIZE;
+
+  if (end2 != dev->start) {
+    
+    dev->buf[dev->end] = c;
+    dev->end = end2;
+
+    return 0;
+  }
+
+  return -1;
+}
+
+static int del_char(struct device_desc * dev) {
+
+  if (dev->end == dev->start) {
+
+    return -1;
+  }
+  
+  int end2 = ((dev->end-1)>=0)?dev->end-1:TTY_BUF_SIZE-1;
+
+  if ( (dev->buf[end2] == '\r') || (dev->buf[end2] == '\n') ) {
+
+    return -1;
+  }
+  
+  dev->end = end2;
+  
+  return 0;
+}
+
+static void extract_chars(struct device_desc * dev, size_t len, unsigned char * buf) {
+
+  int i;
+  size_t n = 0;
+  
+  for (i = dev->start; n < len; i = (i+1)%TTY_BUF_SIZE) {
+
+    buf[n] = dev->buf[i];
+    ++n;
+  }
+
+  dev->start = i;
+}
+
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
   emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
@@ -186,12 +245,49 @@ static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t p
 
 static ssize_t local_tty_read(int fd, void * buf, size_t len) {
 
+  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
+  
+  size_t len2 = 0;
+
+  if (dev->ctrl.c_lflag & ICANON) {
+
+    // Search EOL
+
+    for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
+
+      if ( (dev->buf[i] == '\n') || (dev->buf[i] == '\r') ) {
+
+	len2 = (i >= dev->start)?i-dev->start+1:TTY_BUF_SIZE-dev->start+i+1;
+	break;
+      }
+    }
+      
+  }
+  else {
+
+    len2 = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
+  }
+
+  if (len2 > 0) {
+      
+    size_t sent_len = (len2 <= len)?len2:len;
+
+    //emscripten_log(EM_LOG_CONSOLE, "dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
+	
+    extract_chars(dev, sent_len, buf);
+
+    return sent_len;
+  }
+    
   return 0;
 }
 
 static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
-  
+
+  unsigned char tmp_buf[4096];
   struct termios * ctrl = (fd == -1)?&(get_device(1)->ctrl):&(get_device_from_fd(fd)->ctrl);
+
+  unsigned char * data = (unsigned char *)buf;
 
   //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: count=%d %d", count, ctrl->c_oflag);
 
@@ -201,13 +297,23 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
     //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: i=%d c=%d", i, ((unsigned char *)buf)[i]);
 
-    if ( (((unsigned char *)buf)[i] == '\n') && (ctrl->c_oflag & ONLCR) ) {
+    if ( (data[i] == '\n') && (ctrl->c_oflag & ONLCR) ) {
 
       tmp_buf[j] = '\r';
       ++j;
       }
+    else if ( (data[i] == '\r') && (ctrl->c_oflag & OCRNL) ) {
+
+      tmp_buf[j] = '\n';
+      ++j;
+      continue;
+      }
+    else if ( (data[i] == '\r') && (ctrl->c_oflag & ONLRET) ) {
+
+      continue;
+      }
     
-    tmp_buf[j] = ((unsigned char *)buf)[i];
+    tmp_buf[j] = data[i];
     ++j;
   }
 
@@ -248,6 +354,12 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
     break;
 
+  case TCFLSH:
+
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCFLSH");
+
+    break;
+
   default:
     break;
   }
@@ -260,15 +372,155 @@ static int local_tty_close(int fd) {
   return 0;
 }
 
-static ssize_t local_tty_enqueue(int fd, const void * buf, size_t count) {
 
-  emscripten_log(EM_LOG_CONSOLE, "enqueue");
 
-  // TODO: echo if needed
+static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct message * reply_msg) {
 
-  // TODO: add in circular buffer
+  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
 
-  // reply to read if pending read
+  unsigned char * data = (unsigned char *)buf;
+
+  unsigned char echo_buf[1024];
+  
+  //emscripten_log(EM_LOG_CONSOLE, "enqueue: %d", data[0]);
+
+  int j = 0;
+
+  for (int i = 0; i < count; ++i) {
+
+    if ( (data[i] == '\r') && (dev->ctrl.c_iflag & IGNCR) ) {
+      // do nothing
+    }
+    if ( (data[i] == '\r') && (dev->ctrl.c_iflag & ICRNL) ) {
+
+      data[j] = '\n';
+      ++j;
+    }
+    else if ( (data[i] == '\n') && (dev->ctrl.c_iflag & INLCR) ) {
+
+      data[j] = '\r';
+      ++j;
+    }
+    else {
+
+      data[j] = data[i];
+      ++j;
+    }
+  }
+
+  int k = 0;
+
+  for (int i = 0; i < j; ++i) {
+    
+    if (data[i] == dev->ctrl.c_cc[VERASE]) {
+
+      if (dev->ctrl.c_lflag & (ICANON | ECHOE)) {
+
+	// erase previous char (if any)
+
+	if (del_char(dev) >= 0) {
+
+	  echo_buf[k++] = 27;
+	  echo_buf[k++] = '[';
+	  echo_buf[k++] = 'D';
+	  echo_buf[k++] = 27;
+	  echo_buf[k++] = '[';
+	  echo_buf[k++] = 'K';
+	}
+      }
+      else {
+
+	// enqueue
+      }
+    
+    }
+    else if (data[i] == dev->ctrl.c_cc[VWERASE]) {
+
+      if (dev->ctrl.c_lflag & (ICANON | ECHOE)) {
+
+	// erase previous word
+
+	
+      }
+      else {
+
+	// enqueue
+      }
+    
+    }
+    else if (data[i] == dev->ctrl.c_cc[VKILL]) {
+
+      if (dev->ctrl.c_lflag & (ICANON | ECHOK)) {
+
+	// erase current line
+
+	
+      }
+      else {
+
+	// enqueue
+      }
+    
+    }
+    else {
+
+      add_char(dev, data[i]);
+
+      if (dev->ctrl.c_lflag & ECHO) {
+
+	echo_buf[k] = data[i];
+	++k;
+      }
+    }
+  }
+
+  // Echo
+  if (k > 0) {
+    
+    local_tty_write(fd, echo_buf, k);
+  }
+
+  if ( (j > 0) && (dev->read_pending.len > 0) ) { // Pending read
+
+    size_t len = 0;
+
+    if (dev->ctrl.c_lflag & ICANON) {
+
+      // Search EOL
+
+      for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
+
+	if ( (dev->buf[i] == '\n') || (dev->buf[i] == '\r') ) {
+
+	  len = (i >= dev->start)?i-dev->start+1:TTY_BUF_SIZE-dev->start+i+1;
+	  break;
+	}
+      }
+      
+    }
+    else {
+
+      len = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
+    }
+
+    if (len > 0) {
+
+      reply_msg->msg_id = READ|0x80;
+      reply_msg->pid = dev->read_pending.pid;
+      reply_msg->_errno = 0;
+      reply_msg->_u.io_msg.fd = dev->read_pending.fd;
+
+      size_t sent_len = (len <= dev->read_pending.len)?len:dev->read_pending.len;
+      
+      reply_msg->_u.io_msg.len = sent_len;
+
+      //emscripten_log(EM_LOG_CONSOLE, "dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
+	
+      extract_chars(dev, sent_len, reply_msg->_u.io_msg.buf);
+
+      return sent_len;
+    }
+  }
   
   return 0;
 }
@@ -282,6 +534,16 @@ static struct device_ops local_tty_ops = {
   .close = local_tty_close,
   .enqueue = local_tty_enqueue,
 };
+
+void add_pending_request(pid_t pid, int fd, size_t len, struct sockaddr * addr, unsigned long addr_len) {
+
+  struct device_desc * dev = get_device_from_fd(fd);
+
+  dev->read_pending.pid = pid;
+  dev->read_pending.fd = fd;
+  dev->read_pending.len = len;
+  memcpy(&dev->read_pending.client_addr, addr, addr_len);
+}
 
 int main() {
 
@@ -369,14 +631,29 @@ int main() {
     }
     else if (msg->msg_id == (READ_TTY)) {
 
-      get_device(1)->ops->enqueue(-1, msg->_u.read_tty_msg.buf, msg->_u.read_tty_msg.len);
+      unsigned char reply_buf[1256];
+      struct message * reply_msg = (struct message *)&reply_buf[0];
+      
+      reply_msg->msg_id = 0;
+
+      get_device(1)->ops->enqueue(-1, msg->_u.read_tty_msg.buf, msg->_u.read_tty_msg.len, reply_msg);
+
+      if (reply_msg->msg_id == (READ|0x80)) {
+
+	struct device_desc * dev = get_device(1);
+
+	dev->read_pending.len = 0; // unset read pending
+
+	sendto(sock, reply_buf, 1256, 0, (struct sockaddr *) &dev->read_pending.client_addr, sizeof(dev->read_pending.client_addr));
+      }
+      
     }
     else if (msg->msg_id == (REGISTER_DEVICE|0x80)) {
 
       if (msg->_errno)
 	continue;
 
-      emscripten_log(EM_LOG_CONSOLE,"REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
+      emscripten_log(EM_LOG_CONSOLE, "REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
     }
     else if (msg->msg_id == OPEN) {
 
@@ -394,16 +671,20 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d: %d", msg->pid, msg->_u.io_msg.len);
 
       int count = get_device_from_fd(msg->_u.io_msg.fd)->ops->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
       
-      if (count > 0) {
+      if ( (count > 0) || (msg->_u.io_msg.len == 0) ) {
 	
 	msg->_u.io_msg.len = count;
 
 	msg->msg_id |= 0x80;
 	sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      }
+      else {
+
+	add_pending_request(msg->pid, msg->_u.io_msg.fd, msg->_u.io_msg.len, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       }
     }
     else if (msg->msg_id == WRITE) {
