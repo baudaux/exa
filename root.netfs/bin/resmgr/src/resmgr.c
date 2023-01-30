@@ -572,7 +572,7 @@ int main() {
     }
     else if (msg->msg_id == GETPGID) {
 
-      emscripten_log(EM_LOG_CONSOLE, "GETPPID from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "GETPGID from %d", msg->pid);
 
       if (msg->_u.getpgid_msg.pid == 0)
 	msg->_u.getpgid_msg.pgid = process_getpgid(msg->pid);
@@ -588,7 +588,7 @@ int main() {
     }
     else if (msg->msg_id == SETPGID) {
 
-      emscripten_log(EM_LOG_CONSOLE, "SETPPID from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "SETPGID from %d", msg->pid);
 
       if (msg->_u.getpgid_msg.pid == 0)
         process_setpgid(msg->pid, msg->_u.getpgid_msg.pgid);

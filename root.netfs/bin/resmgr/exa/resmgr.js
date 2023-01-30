@@ -3871,13 +3871,11 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	      let wait_bind = true;
   
   	      sock.name = addr;
-  	      
+  
   	      sock.bc = new BroadcastChannel(addr);
   	      
   	      sock.bc.onmessage = (messageEvent) => {
   
-  		  //console.log(messageEvent);
-  		  
   		  if (wait_bind) {
   
   		      wait_bind = false;
@@ -6776,8 +6774,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 2900;
-var ___stop_em_js = Module['___stop_em_js'] = 3518;
+var ___start_em_js = Module['___start_em_js'] = 2916;
+var ___stop_em_js = Module['___stop_em_js'] = 3534;
 
 
 

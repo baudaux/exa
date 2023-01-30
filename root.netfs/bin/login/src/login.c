@@ -60,13 +60,15 @@
 # include <linux/major.h>
 #endif
 
+#include <emscripten.h>
+
 extern char ** environ;
 
 #include <netdb.h>
-//BB
-//#include <security/pam_appl.h>
 
-/*#ifdef HAVE_SECURITY_PAM_MISC_H
+#include <security/pam_appl.h>
+
+#ifdef HAVE_SECURITY_PAM_MISC_H
 # include <security/pam_misc.h>
 #elif defined(HAVE_SECURITY_OPENPAM_H)
 # include <security/openpam.h>
@@ -74,7 +76,7 @@ extern char ** environ;
 
 #ifdef HAVE_LIBAUDIT
 # include <libaudit.h>
-#endif*/
+#endif
 
 
 #include "c.h"
@@ -90,12 +92,6 @@ extern char ** environ;
 #include "pwdutils.h"
 
 #include "logindefs.h"
-
-typedef unsigned long pam_handle_t;
-
-struct pam_conv {
-
-};
 
 #define LOGIN_MAX_TRIES        3
 #define LOGIN_EXIT_TIMEOUT     5
@@ -585,7 +581,8 @@ static void init_tty(struct login_context *cxt)
 	close(STDERR_FILENO);
 
 	signal(SIGHUP, SIG_IGN);	/* so vhangup() won't kill us */
-	vhangup();
+	/* Modified by Benoit Baudaux 30/1/2023 */
+	//vhangup();
 	signal(SIGHUP, SIG_DFL);
 
 	/* open stdin,stdout,stderr to the tty */
@@ -835,6 +832,8 @@ static void log_syslog(struct login_context *cxt)
 			       pwd->pw_name);
 	}
 }
+
+#if 0
 
 /* encapsulate stupid "void **" pam_get_item() API */
 static int loginpam_get_username(pam_handle_t *pamh, const char **name)
@@ -1281,6 +1280,8 @@ static void init_remote_info(struct login_context *cxt, char *remotehost)
 	}
 }
 
+#endif // if 0
+
 static void __attribute__((__noreturn__)) usage(void)
 {
 	fputs(USAGE_HEADER, stdout);
@@ -1312,6 +1313,8 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 		{"version", no_argument, NULL, 'V'},
 		{NULL, 0, NULL, 0}
 	};
+
+	emscripten_log(EM_LOG_CONSOLE,"--> initialize");
 
 	timeout = (unsigned int)getlogindefs_num("LOGIN_TIMEOUT", LOGIN_TIMEOUT);
 
@@ -1346,7 +1349,9 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 					_("login: -h is for superuser only\n"));
 				exit(EXIT_FAILURE);
 			}
-			init_remote_info(cxt, optarg);
+			/* Modified by Benoit Baudaux 30/1/2023 */
+			// option h not used
+			//init_remote_info(cxt, optarg);
 			break;
 
 		case 'p':
@@ -1366,6 +1371,8 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 	if (*argv) {
 		char *p = *argv;
 
+		emscripten_log(EM_LOG_CONSOLE,"initialize: cmd_username=%s", p);
+
 		/* username from command line */
 		cxt->cmd_username = xstrdup(p);
 		/* used temporary, it'll be replaced by username from PAM or/and cxt->pwd */
@@ -1380,10 +1387,14 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 			*p++ = ' ';
 #endif
 	}
+#if 0 //TOTEST
 #ifdef HAVE_CLOSE_RANGE
 	if (close_range(STDERR_FILENO + 1, ~0U, 0) < 0)
 #endif
 		ul_close_all_fds(STDERR_FILENO + 1, ~0U);
+	#endif
+
+	emscripten_log(EM_LOG_CONSOLE,"<-- initialize");
 }
 
 int main(int argc, char **argv)
@@ -1394,21 +1405,28 @@ int main(int argc, char **argv)
 	struct login_context cxt = {
 		.tty_mode = TTY_MODE,		  /* tty chmod() */
 		.pid = getpid(),		  /* PID */
+		#if 0
 #ifdef HAVE_SECURITY_PAM_MISC_H
 		.conv = { misc_conv, NULL }	  /* Linux-PAM conversation function */
 #elif defined(HAVE_SECURITY_OPENPAM_H)
 		.conv = { openpam_ttyconv, NULL } /* OpenPAM conversation function */
 #endif
+		#endif
 	};
 
 	setlocale(LC_ALL, "");
 	bindtextdomain(PACKAGE, LOCALEDIR);
 	textdomain(PACKAGE);
 
+	emscripten_log(EM_LOG_CONSOLE,"--> login::main");
+	
 	initialize(argc, argv, &cxt);
 
 	setpgrp();	 /* set pgid to pid this means that setsid() will fail */
+
 	init_tty(&cxt);
+
+	#if 0
 
 	openlog("login", LOG_ODELAY, LOG_AUTHPRIV);
 
@@ -1554,6 +1572,8 @@ int main(int argc, char **argv)
 		warn(_("couldn't exec shell script"));
 	else
 		warn(_("no shell"));
+
+	#endif
 
 	exit(EXIT_SUCCESS);
 }
