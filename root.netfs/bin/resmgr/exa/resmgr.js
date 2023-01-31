@@ -6774,8 +6774,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 2916;
-var ___stop_em_js = Module['___stop_em_js'] = 3534;
+var ___start_em_js = Module['___start_em_js'] = 2964;
+var ___stop_em_js = Module['___stop_em_js'] = 3582;
 
 
 

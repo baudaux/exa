@@ -31,7 +31,7 @@ void device_init() {
   memset(majors, 0, sizeof(majors));
   memset(drivers, 0, sizeof(drivers));
   devices = NULL;
-
+  
   struct vnode * vnode = vfs_find_node("/");
 
   // Add /dev

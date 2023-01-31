@@ -1,3 +1,5 @@
 # Max time in seconds for login
 #
 LOGIN_TIMEOUT       60
+
+TTYPERM		    0600

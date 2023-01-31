@@ -519,6 +519,8 @@ static void chown_tty(struct login_context *cxt)
  */
 static void init_tty(struct login_context *cxt)
 {
+  emscripten_log(EM_LOG_CONSOLE,"--> init_tty");
+  
 	struct stat st;
 	struct termios tt, ttt;
 	struct winsize ws;
@@ -526,6 +528,8 @@ static void init_tty(struct login_context *cxt)
 	cxt->tty_mode = (mode_t) getlogindefs_num("TTYPERM", TTY_MODE);
 
 	get_terminal_name(&cxt->tty_path, &cxt->tty_name, &cxt->tty_number);
+
+	emscripten_log(EM_LOG_CONSOLE,"get_terminal_name: %s %s %d", cxt->tty_path, cxt->tty_name, cxt->tty_number);
 
 	/*
 	 * In case login is suid it was possible to use a hardlink as stdin
@@ -595,6 +599,8 @@ static void init_tty(struct login_context *cxt)
 	if ((ws.ws_row > 0 || ws.ws_col > 0)
 	    && ioctl(STDIN_FILENO, TIOCSWINSZ, &ws) < 0)
 		syslog(LOG_WARNING, _("TIOCSWINSZ ioctl failed: %m"));
+
+	emscripten_log(EM_LOG_CONSOLE,"<-- init_tty");
 }
 
 /*

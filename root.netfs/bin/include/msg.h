@@ -44,7 +44,8 @@ enum message_id {
   SETPGID,
   PROBE_TTY,
   READ_TTY,
-  WRITE_TTY,
+  WRITE_TTY = 25,
+  IS_OPEN,
 };
 
 enum dev_type {
@@ -173,6 +174,15 @@ struct read_tty_message {
   unsigned char buf[];
 };
 
+struct is_open_message {
+  
+  int fd;
+  int remote_fd;
+  unsigned char type;
+  unsigned short major;
+  char peer[108];
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -201,6 +211,7 @@ struct message {
     struct getppid_message getppid_msg;
     struct probe_tty_message probe_tty_msg;
     struct read_tty_message read_tty_msg;
+    struct is_open_message is_open_msg;
     
   } _u;
 };

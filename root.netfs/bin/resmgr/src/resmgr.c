@@ -602,6 +602,27 @@ int main() {
 
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr)); 
     }
+    else if (msg->msg_id == IS_OPEN) {
+
+      emscripten_log(EM_LOG_CONSOLE, "IS_OPEN from %d", msg->pid);
+
+      if (process_get_fd(msg->pid, msg->_u.is_open_msg.fd, &msg->_u.is_open_msg.type, &msg->_u.is_open_msg.major, &msg->_u.is_open_msg.remote_fd) == 0) {
+
+	struct driver * drv = device_get_driver(msg->_u.is_open_msg.type, msg->_u.is_open_msg.major);
+
+	if (drv) {
+
+	  strcpy(msg->_u.is_open_msg.peer, drv->peer);
+
+	  emscripten_log(EM_LOG_CONSOLE, "IS_OPEN found %d %d %d %s", msg->_u.is_open_msg.type, msg->_u.is_open_msg.major, msg->_u.is_open_msg.remote_fd, msg->_u.is_open_msg.peer);
+
+	  msg->msg_id |= 0x80;
+	  msg->_errno = 0;
+
+	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
+      }
+    }
   }
   
   return 0;
