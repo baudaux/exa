@@ -73,6 +73,9 @@ pid_t create_tty_process();
 pid_t create_netfs_process();
 pid_t create_init_process();
 
+void process_add_proc_fd_entry(pid_t pid, int fd, char * link);
+void process_del_proc_fd_entry(pid_t pid, int fd);
+
 int process_create_fd(pid_t pid, int remote_fd, unsigned char type, unsigned short major, unsigned short minor);
 int process_get_fd(pid_t pid, int fd, unsigned char * type, unsigned short * major, int * remote_fd);
 int process_close_fd(pid_t pid, int fd);

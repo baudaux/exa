@@ -5910,19 +5910,83 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function ___syscall_readlinkat(dirfd, path, buf, bufsize) {
   try {
   
-      path = SYSCALLS.getStr(path);
-      path = SYSCALLS.calculateAt(dirfd, path);
-      if (bufsize <= 0) return -28;
-      var ret = FS.readlink(path);
   
-      var len = Math.min(bufsize, lengthBytesUTF8(ret));
-      var endChar = HEAP8[buf+len];
-      stringToUTF8(ret, buf, bufsize+1);
-      // readlink is one of the rare functions that write out a C string, but does never append a null to the output buffer(!)
-      // stringToUTF8() always appends a null byte, so restore the character under the null byte after the write.
-      HEAP8[buf+len] = endChar;
-      return len;
-    } catch (e) {
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let buf_size = 1256;
+  	
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 27; // READLINK
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    buf2[12] = dirfd & 0xff;
+  	    buf2[13] = (dirfd >> 8) & 0xff;
+  	    buf2[14] = (dirfd >> 16) & 0xff;
+  	    buf2[15] = (dirfd >> 24) & 0xff;
+  
+  	    let path_len = 0;
+  
+  	    while (Module.HEAPU8[path+path_len]) {
+  
+  		path_len++;
+  	    }
+  
+  	    path_len++;
+  
+  	    buf2.set(Module.HEAPU8.slice(path,path+path_len), 20);
+  
+  	    buf2[16] = path_len & 0xff;
+  	    buf2[17] = (path_len >> 8) & 0xff;
+  	    buf2[18] = (path_len >> 16) & 0xff;
+  	    buf2[19] = (path_len >> 24) & 0xff;
+  	    
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (27|0x80)) {
+  
+  		    console.log(messageEvent);
+  		    
+  		    // TODO: check bufsize
+  
+  		    let len = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
+  
+  		    Module.HEAPU8.set(msg2.buf.slice(20, 20+len), buf);
+  
+  		    wakeUp(0);
+  
+  		    return 0;
+  		}
+  
+  		return -1;
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  
+  	    bc.postMessage(msg);
+  	    
+  	});
+  
+  	return ret;
+      } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
   }
@@ -7826,7 +7890,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -8363,8 +8427,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 6004;
-var ___stop_em_js = Module['___stop_em_js'] = 6622;
+var ___start_em_js = Module['___start_em_js'] = 6052;
+var ___stop_em_js = Module['___stop_em_js'] = 6670;
 
 
 

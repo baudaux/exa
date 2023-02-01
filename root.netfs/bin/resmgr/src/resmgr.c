@@ -204,6 +204,9 @@ int main() {
 
       msg->_u.socket_msg.fd = process_create_fd(msg->pid, -2, (unsigned char)(msg->_u.socket_msg.type & 0xff), (unsigned short)(msg->_u.socket_msg.domain & 0xffff), (unsigned short)(msg->_u.socket_msg.protocol & 0xffff));
 
+      // Add /proc/<pid>/fd/<fd> entry
+      process_add_proc_fd_entry(msg->pid, msg->_u.socket_msg.fd, "socket");
+
       if (msg->_u.socket_msg.type & SOCK_CLOEXEC) {
 
 	// TODO
@@ -291,6 +294,9 @@ int main() {
 	  
 	msg->_u.open_msg.fd = process_create_fd(msg->pid, msg->_u.open_msg.remote_fd, msg->_u.open_msg.type, msg->_u.open_msg.major, msg->_u.open_msg.minor);
 
+	// Add /proc/<pid>/fd/<fd> entry
+	process_add_proc_fd_entry(msg->pid, msg->_u.open_msg.fd, (char *)msg->_u.open_msg.pathname);
+
 	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
       }
       else {
@@ -310,6 +316,9 @@ int main() {
       if (msg->_errno == 0) {
 
 	msg->_u.open_msg.fd = process_create_fd(msg->pid, msg->_u.open_msg.remote_fd, msg->_u.open_msg.type, msg->_u.open_msg.major, msg->_u.open_msg.minor);
+
+	// Add /proc/<pid>/fd/<fd> entry
+	process_add_proc_fd_entry(msg->pid, msg->_u.open_msg.fd, (char *)msg->_u.open_msg.pathname);
 
 	if ( (msg->_u.open_msg.major == 1) && (!(msg->_u.open_msg.flags & O_NOCTTY )) ) {
 
@@ -338,6 +347,9 @@ int main() {
 
 	// Close the fd for this process
 	process_close_fd(msg->pid, msg->_u.close_msg.fd);
+
+	// Remove /proc/<pid>/fd/<fd> entry
+	process_del_proc_fd_entry(msg->pid, msg->_u.open_msg.fd);
 
 	// Find fd in other processes
 	if (process_find_open_fd(type, major, remote_fd) < 0) {
@@ -622,6 +634,46 @@ int main() {
 	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 	}
       }
+    }
+    else if (msg->msg_id == READLINK) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "READLINK from %d: %s", msg->pid, msg->_u.readlink_msg.pathname_or_buf);
+
+      char * pathname;
+      char str[1024];
+
+      // TODO: other self conversion
+      if (strncmp(msg->_u.readlink_msg.pathname_or_buf, "/proc/self/", 11) == 0) {
+
+	sprintf(str, "/proc/%d/%s", msg->pid, msg->_u.readlink_msg.pathname_or_buf+11);
+
+	pathname = &str[0];
+      }
+      else {
+
+	pathname = msg->_u.readlink_msg.pathname_or_buf;
+      }
+      
+      struct vnode * node = vfs_find_node(pathname);
+
+      if (node->type == VSYMLINK) {
+
+	emscripten_log(EM_LOG_CONSOLE, "READLINK found: %s", node->_u.link.symlink);
+
+	strcpy(msg->_u.readlink_msg.pathname_or_buf, (const char *)node->_u.link.symlink);
+
+	msg->_u.readlink_msg.len = strlen(msg->_u.readlink_msg.pathname_or_buf)+1;
+
+	msg->msg_id |= 0x80;
+	msg->_errno = 0;
+	
+	sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      }
+      else if (node->type == VDEV) {
+	
+	// TODO
+      }
+
     }
   }
   

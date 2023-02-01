@@ -163,6 +163,60 @@ struct vnode * vfs_add_dev(struct vnode * parent, const char * name, unsigned ch
   return vn;
 }
 
+int vfs_del_node(struct vnode * node) {
+
+  if (!node)
+    return -1;
+  
+  if ( (node->type == VDIR) && (node->_u.link.vnode) ) {
+
+    return -1;
+  }
+
+  if (!node->parent)
+    return -1;
+
+  struct vnode * n = node->parent->_u.link.vnode;
+
+  if (n == node) {
+
+    node->parent->_u.link.vnode = node->next;
+  }
+  else {
+
+    while (n->next != node) {
+
+      n = n->next;
+    }
+
+    n->next = node->next;
+  }
+
+  switch(node->type) {
+
+  case VDIR:
+    break;
+  case VFILE:
+    if (node->_u.file.buffer)
+      free(node->_u.file.buffer);
+    break;
+  case VSYMLINK:
+    if (node->_u.link.symlink)
+      free(node->_u.link.symlink);
+    break;
+  case VDEV:
+    break;
+  case VMOUNT:
+    break;
+  default:
+    break;
+  }
+
+  free(node);
+
+  return 0;
+}
+
 int vfs_set_mount(struct vnode * node, unsigned char type, unsigned short major, unsigned short minor) {
 
   node->type = VMOUNT;

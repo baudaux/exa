@@ -38,14 +38,54 @@ void process_init() {
   struct vnode * vnode = vfs_find_node("/");
 
   // Add /proc
-  vfs_proc = vfs_add_dir(vnode,"proc");
-
+  vfs_proc = vfs_add_dir(vnode, "proc");
+  
   for (int i = 0; i < NB_PROCESSES_MAX; ++i) {
 
     processes[i].pid = -1;
   }
 
   process_fork(RESMGR_ID, NO_PARENT, "resmgr", "/bin/resmgr");
+}
+
+void add_proc_entry(pid_t pid) {
+
+  char str[8];
+
+  sprintf(str, "%d", pid);
+
+  // Add /proc/<pid>
+  struct vnode * vfs_proc_pid = vfs_add_dir(vfs_proc, str);
+
+  // Add /proc/<pid>/fd
+  struct vnode * vfs_proc_pid_fd = vfs_add_dir(vfs_proc_pid, "fd");
+}
+
+void process_add_proc_fd_entry(pid_t pid, int fd, char * link) {
+
+  char str[32];
+  char str2[8];
+
+  sprintf(str, "/proc/%d/fd", pid);
+
+  sprintf(str2, "%d", fd);
+
+  struct vnode * vfs_proc_pid_fd = vfs_find_node(str);
+
+  if (vfs_proc_pid_fd)
+    vfs_add_symlink(vfs_proc_pid_fd, str2, link, NULL);
+}
+
+void process_del_proc_fd_entry(pid_t pid, int fd) {
+
+  char str[32];
+
+  sprintf(str, "/proc/%d/fd/%d", pid, fd);
+  
+  struct vnode * vfs_proc_pid_fd = vfs_find_node(str);
+
+  if (vfs_proc_pid_fd)
+    vfs_del_node(vfs_proc_pid_fd);
 }
 
 pid_t create_tty_process() {
@@ -141,6 +181,8 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
   if (pid >= NB_PROCESSES_MAX)
     return -1;
 
+  add_proc_entry(pid);
+  
   processes[pid].proc_state = RUNNING_STATE;
   
   processes[pid].pid = pid;
