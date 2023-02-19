@@ -679,7 +679,7 @@ int main() {
       
       emscripten_log(EM_LOG_CONSOLE, "STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
 
-      struct stat stat_buf;;
+      struct stat stat_buf;
       struct vnode * vnode;
 
       int res = vfs_stat((const char *)msg->_u.stat_msg.pathname_or_buf, &stat_buf, &vnode);

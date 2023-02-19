@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <sys/sysmacros.h>
+
 #include <emscripten.h>
 
 #include "vfs.h"
@@ -429,6 +431,31 @@ int vfs_ioctl(int fd, int op) {
 
   emscripten_log(EM_LOG_CONSOLE, "vfs_ioctl: %d %d", fd, op);
 
+  return -1;
+}
+
+int vfs_stat(const char * pathname, struct stat * buf, struct vnode ** p_vnode) {
+
+  struct vnode * vnode = vfs_find_node(pathname);
+
+  *p_vnode = NULL;
+
+  if (vnode) {
+
+    if ( (vnode->type == VDEV) || (vnode->type == VMOUNT) ) {
+
+      *p_vnode = vnode;
+      return 0;
+    }
+    else {
+
+      buf->st_dev = makedev(0, 0); // vfs major, minor
+      buf->st_ino = (ino_t)vnode;
+      
+      return 0;
+    }
+  }
+  
   return -1;
 }
 

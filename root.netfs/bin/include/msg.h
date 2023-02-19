@@ -46,7 +46,9 @@ enum message_id {
   READ_TTY,
   WRITE_TTY = 25,
   IS_OPEN,
-  READLINK
+  READLINK,
+  STAT,
+  FSTAT,
 };
 
 enum dev_type {
@@ -191,6 +193,19 @@ struct readlink_message {
   char pathname_or_buf[1024];
 };
 
+struct stat_message {
+  
+  int len;
+  char pathname_or_buf[1024];
+};
+
+struct fstat_message {
+  
+  int fd;
+  int len;
+  char buf[1024];
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -221,6 +236,8 @@ struct message {
     struct read_tty_message read_tty_msg;
     struct is_open_message is_open_msg;
     struct readlink_message readlink_msg;
+    struct stat_message stat_msg;
+    struct fstat_message fstat_msg;
     
   } _u;
 };

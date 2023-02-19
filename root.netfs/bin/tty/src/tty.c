@@ -19,6 +19,8 @@
 #include <fcntl.h>
 #include <stropts.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/sysmacros.h>
 
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -731,6 +733,57 @@ int main() {
       msg->msg_id |= 0x80;
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
       
+    }
+    else if (msg->msg_id == STAT) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "tty: STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
+
+      char * tty = strrchr(msg->_u.stat_msg.pathname_or_buf, '/')+1;
+
+      struct stat stat_buf;
+
+      if (strncmp(tty, "tty", 3) == 0) {
+
+	int min = atoi(tty+3);
+	
+	emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
+
+	stat_buf.st_dev = makedev(major, min);
+	stat_buf.st_ino = (ino_t)&devices[min];
+
+	msg->_u.stat_msg.len = sizeof(struct stat);
+	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
+
+	msg->_errno = 0;
+      }
+      else {
+
+	msg->_errno = -1;
+      }
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+    }
+    else if (msg->msg_id == FSTAT) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT from %d: %d -> minor=%d", msg->pid, msg->_u.fstat_msg.fd, clients[msg->_u.fstat_msg.fd].minor);
+
+      struct stat stat_buf;
+
+      int min = clients[msg->_u.fstat_msg.fd].minor;
+
+      stat_buf.st_dev = makedev(major, min);
+      stat_buf.st_ino = (ino_t)&devices[min];
+
+      msg->_u.fstat_msg.len = sizeof(struct stat);
+      memcpy(msg->_u.fstat_msg.buf, &stat_buf, sizeof(struct stat));
+
+      msg->msg_id |= 0x80;
+
+      msg->_errno = 0;
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
     }
   }
   
