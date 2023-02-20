@@ -740,7 +740,38 @@ int main() {
 
       char * tty = strrchr(msg->_u.stat_msg.pathname_or_buf, '/')+1;
 
-      struct stat stat_buf;
+      if (strncmp(tty, "tty", 3) == 0) {
+
+	int min = atoi(tty+3);
+	
+	emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
+
+	struct stat stat_buf;
+
+	stat_buf.st_dev = makedev(major, min);
+	stat_buf.st_ino = (ino_t)&devices[min];
+
+	emscripten_log(EM_LOG_CONSOLE, "tty: STAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+
+	msg->_u.stat_msg.len = sizeof(struct stat);
+	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
+
+	msg->_errno = 0;
+      }
+      else {
+
+	msg->_errno = -1;
+      }
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+
+    }
+    else if (msg->msg_id == LSTAT) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
+
+      char * tty = strrchr(msg->_u.stat_msg.pathname_or_buf, '/')+1;
 
       if (strncmp(tty, "tty", 3) == 0) {
 
@@ -748,9 +779,14 @@ int main() {
 	
 	emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
 
+	struct stat stat_buf;
+
 	stat_buf.st_dev = makedev(major, min);
 	stat_buf.st_ino = (ino_t)&devices[min];
+	stat_buf.st_mode = S_IFCHR;
 
+	emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+	
 	msg->_u.stat_msg.len = sizeof(struct stat);
 	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
 
@@ -775,6 +811,9 @@ int main() {
 
       stat_buf.st_dev = makedev(major, min);
       stat_buf.st_ino = (ino_t)&devices[min];
+      stat_buf.st_mode = S_IFCHR;
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
 
       msg->_u.fstat_msg.len = sizeof(struct stat);
       memcpy(msg->_u.fstat_msg.buf, &stat_buf, sizeof(struct stat));

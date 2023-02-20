@@ -3854,6 +3854,18 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
         if (!stream) throw new FS.ErrnoError(8);
         return stream;
       }};
+  function ___syscall_chdir(path) {
+  try {
+  
+      path = SYSCALLS.getStr(path);
+      FS.chdir(path);
+      return 0;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   function ___syscall_chmod(path, mode) {
   try {
   
@@ -5034,6 +5046,139 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   }
   }
 
+  function ___syscall_execve(pathname, argv, envp) {
+  try {
+  
+  
+  	console.log("__syscall_execve: argv="+argv+", envp="+envp);
+  
+  	// Use Asyncify for not returning from execve
+  	
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let buf_size = 1256;
+  
+  	    let buf = new Uint8Array(buf_size);
+  
+  	    buf[0] = 8; // EXECVE
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf[4] = pid & 0xff;
+  	    buf[5] = (pid >> 8) & 0xff;
+  	    buf[6] = (pid >> 16) & 0xff;
+  	    buf[7] = (pid >> 24) & 0xff;
+  
+  	    // errno
+  	    buf[8] = 0;
+  	    buf[9] = 0;
+  	    buf[10] = 0;
+  	    buf[11] = 0;
+  
+  	    // Copy args in buf
+  
+  	    let i = 0;
+  
+  	    for (let offset = 0; ; offset += 4) {
+  
+  		let arg = Module.HEAPU8[argv+offset] | (Module.HEAPU8[argv+offset+1] << 8) | (Module.HEAPU8[argv+offset+2] << 16) |  (Module.HEAPU8[argv+offset+3] << 24);
+  
+  		if (!arg)
+  		    break;
+  
+  		let j;
+  
+  		for (j = 0; Module.HEAPU8[arg+j]; j++) {
+  
+  		    buf[16+i+j] = Module.HEAPU8[arg+j];
+  		}
+  		
+  		buf[16+i+j] = 0;
+  		j++;
+  
+  		i += j;
+  	    }
+  
+  	    buf[12] = i & 0xff;
+  	    buf[13] = (i >> 8) & 0xff;
+  	    buf[14] = (i >> 16) & 0xff;
+  	    buf[15] = (i >> 24) & 0xff;
+  
+  	    // Copy env in buf
+  
+  	    let e = 16 + i;
+  	    let f = e + 8; // keep space for count and size (in that order)
+  
+  	    i = 0;
+  
+  	    let count = 0;
+  
+  	    for (let offset = 0; ; offset += 4) {
+  
+  		let str = Module.HEAPU8[envp+offset] | (Module.HEAPU8[envp+offset+1] << 8) | (Module.HEAPU8[envp+offset+2] << 16) |  (Module.HEAPU8[envp+offset+3] << 24);
+  
+  		if (!str)
+  		    break;
+  
+  		count++;
+  
+  		let j;
+  
+  		for (j = 0; Module.HEAPU8[str+j]; j++) {
+  
+  		    buf[f+i+j] = Module.HEAPU8[str+j];
+  		}
+  		
+  		buf[f+i+j] = 0;
+  		j++;
+  
+  		i += j;
+  	    }
+  
+  	    buf[e] = count & 0xff;
+  	    buf[e+1] = (count >> 8) & 0xff;
+  	    buf[e+2] = (count >> 16) & 0xff;
+  	    buf[e+3] = (count >> 24) & 0xff;
+  
+  	    buf[e+4] = i & 0xff;
+  	    buf[e+5] = (i >> 8) & 0xff;
+  	    buf[e+6] = (i >> 16) & 0xff;
+  	    buf[e+7] = (i >> 24) & 0xff;
+  
+  	    // rcv_bc_channel is not registered if it is a fork of resmgr
+  
+  	    let rcv_bc = Module['rcv_bc_channel'] || new BroadcastChannel("channel.process."+window.frameElement.getAttribute('pid'));
+  
+  	    let msg = {
+  
+  		from: rcv_bc.name,
+  		buf: buf,
+  		len: buf_size
+  	    };
+  
+  	    let bc;
+  
+  	    // Module.get_broadcast_channel is not registered if it is a fork of resmgr
+  	    
+  	    if (Module.get_broadcast_channel)
+  		bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  	    else
+  		bc = new BroadcastChannel("/var/resmgr.peer");
+  
+  	    bc.postMessage(msg);
+  	    
+  	    // name property of window for process to be loaded fully and args and env to be recovered
+  	    window.name = "exec";
+  	    
+  	    window.frameElement.src = SYSCALLS.getStr(pathname)+"/exa/exa.html";
+  	});
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   function ___syscall_faccessat(dirfd, path, amode, flags) {
   try {
   
@@ -5206,6 +5351,149 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
         }
       }
     } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function ___syscall_fork() {
+  try {
+  
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    console.log("fork: pid="+pid);
+  
+  	    function do_fork() {
+  
+  		let channel = 'channel.1.'+Module.child_pid+'.fork';
+  
+  		if (!Module[channel]) {
+  
+  		    Module[channel] = new BroadcastChannel('channel.1.'+Module.child_pid+'.fork');
+  
+  		    Module[channel].onmessage = (function(_ch,_pid) {
+  
+  			return ((messageEvent) => {
+  
+  			    if (messageEvent.data == "continue_fork") {
+  
+  				//console.log("continue_fork");
+  
+  				if (Module[_ch]) {
+  
+  				    Module[_ch].postMessage(Module.HEAPU8);
+  
+  				    Asyncify.stackTop = stackSave();
+  				    Asyncify.stackBase = _emscripten_stack_get_base();
+  				    Asyncify.stackEnd = _emscripten_stack_get_end();
+  				    
+  				    Module[_ch].postMessage(JSON.stringify(Asyncify));
+  				}
+  			    }
+  			    else if (messageEvent.data == "end_fork") {
+  
+  				Module[_ch].close();
+  
+  				wakeUp(_pid);
+  			    }
+  
+  			});
+  		    })(channel,Module.child_pid);
+  
+  		    let msg = {
+  
+  			type: 3,   // fork
+  			pid: Module.child_pid
+  		    };
+  
+  		    window.parent.postMessage(msg);
+  		}
+  	    };
+  
+  	    if (pid == 1) {  // Fork called by resmgr
+  
+  		if (!Module.child_pid) {
+  
+  		    // Reserve 1 for resmgr, so start at 2
+  		    
+  		    Module.child_pid = 2;
+  		}
+  		else {
+  
+  		    Module.child_pid += 1;
+  		}
+  
+  		do_fork();
+  	    }
+  	    else {
+  
+  		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  
+  		console.log(bc);
+  
+  		let buf = new Uint8Array(256);
+  
+  		buf[0] = 7; // FORK
+  
+  		/*//padding
+  		  buf[1] = 0;
+  		  buf[2] = 0;
+  		  buf[3] = 0;*/
+  
+  		// pid
+  		buf[4] = pid & 0xff;
+  		buf[5] = (pid >> 8) & 0xff;
+  		buf[6] = (pid >> 16) & 0xff;
+  		buf[7] = (pid >> 24) & 0xff;
+  
+  		// errno
+  		buf[8] = 0x0;
+  		buf[9] = 0x0;
+  		buf[10] = 0x0;
+  		buf[11] = 0x0;
+  
+  		// child pid
+  		buf[12] = 0x0;
+  		buf[13] = 0x0;
+  		buf[14] = 0x0;
+  		buf[15] = 0x0;
+  
+  		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  		    
+  		    console.log(messageEvent);
+  
+  		    let msg2 = messageEvent.data;
+  
+  		    if (msg2.buf[0] == (7|0x80)) {
+  
+  			Module['rcv_bc_channel'].set_handler(null);
+  
+  			Module.child_pid = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  			do_fork();
+  
+  			return 0;
+  		    }
+  
+  		    return -1;
+  		});
+  
+  		let msg = {
+  
+  		    from: Module['rcv_bc_channel'].name,
+  		    buf: buf,
+  		    len: 256
+  		};
+  		
+  		bc.postMessage(msg);
+  	    }
+  	});
+  
+  	return ret;
+      } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
   }
@@ -5726,7 +6014,100 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_lstat64");
+  	console.log("__syscall_lstat64: "+SYSCALLS.getStr(path));
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let buf_size = 1256;
+  	
+  	    let buf2 = new Uint8Array(buf_size);
+  	    
+  	    buf2[0] = 30; // LSTAT
+  
+  	    /*//padding
+  	      buf[1] = 0;
+  	      buf[2] = 0;
+  	      buf[3] = 0;*/
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    // errno
+  	    buf2[8] = 0x0;
+  	    buf2[9] = 0x0;
+  	    buf2[10] = 0x0;
+  	    buf2[11] = 0x0;
+  
+  	    let path_len = 0;
+  
+  	    while (Module.HEAPU8[path+path_len]) {
+  
+  		path_len++;
+  	    }
+  
+  	    path_len++;
+  
+  	    buf2[12] = path_len & 0xff;
+  	    buf2[13] = (path_len >> 8) & 0xff;
+  	    buf2[14] = (path_len >> 16) & 0xff;
+  	    buf2[15] = (path_len >> 24) & 0xff;
+  
+  	    buf2.set(Module.HEAPU8.slice(path,path+path_len), 16);
+  	    
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  		
+  		//console.log(messageEvent);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (30|0x80)) {
+  
+  		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
+  
+  		    console.log("__syscall_lstat64: _errno="+_errno);
+  
+  		    if (_errno == 0) {
+  
+  			let len = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  			console.log("__syscall_lstat64: len="+len);
+  
+  			Module.HEAPU8.set(msg2.buf.slice(16, 16+len), buf);
+  
+  			wakeUp(0);
+  		    }
+  		    else {
+  
+  			wakeUp(-1);
+  		    }
+  
+  		    return 0;
+  		}
+  
+  		return -1;
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: 1256
+  	    };
+  
+  	    let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  	    
+  	    bc.postMessage(msg);
+  
+  	});
+  
+  	return ret;
   
   	/* Modified by Benoit Baudaux 8/2/2023 */
       /*path = SYSCALLS.getStr(path);
@@ -6288,6 +6669,72 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   }
   }
 
+  function ___syscall_setsid() {
+  try {
+  
+  
+  	let ret = Asyncify.handleSleep(function (wakeUp) {
+  
+  	    let buf_size = 16;
+  	
+  	    let buf2 = new Uint8Array(buf_size);
+  
+  	    buf2[0] = 16; // SETSID
+  
+  	    let pid = parseInt(window.frameElement.getAttribute('pid'));
+  
+  	    // pid
+  	    buf2[4] = pid & 0xff;
+  	    buf2[5] = (pid >> 8) & 0xff;
+  	    buf2[6] = (pid >> 16) & 0xff;
+  	    buf2[7] = (pid >> 24) & 0xff;
+  
+  	    // sid
+  	    buf2[12] = 0;
+  	    buf2[13] = 0;
+  	    buf2[14] = 0;
+  	    buf2[15] = 0;
+  
+  	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
+  
+  		Module['rcv_bc_channel'].set_handler(null);
+  
+  		let msg2 = messageEvent.data;
+  
+  		if (msg2.buf[0] == (16|0x80)) {
+  
+  		    //console.log(messageEvent);
+  
+  		    let sid = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  		    wakeUp(sid);
+  
+  		    return 0;
+  		}
+  
+  		return -1;
+  	    });
+  
+  	    let msg = {
+  
+  		from: Module['rcv_bc_channel'].name,
+  		buf: buf2,
+  		len: buf_size
+  	    };
+  
+  	    let bc = Module.get_broadcast_channel("/var/resmgr.peer");
+  
+  	    bc.postMessage(msg);
+  
+  	});
+  	
+  	return ret;
+      } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
   function ___syscall_socket(domain, type, protocol) {
   try {
   
@@ -6510,6 +6957,12 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   		    console.log("__syscall_stat64: _errno="+_errno);
   
   		    if (_errno == 0) {
+  
+  			let len = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
+  
+  			console.log("__syscall_stat64: len="+len);
+  
+  			Module.HEAPU8.set(msg2.buf.slice(16, 16+len), buf);
   
   			wakeUp(0);
   		    }
@@ -7042,6 +7495,11 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
           _raise(14);
         });
       }, seconds*1000);
+    }
+
+  function _emscripten_console_error(str) {
+      assert(typeof str == 'number');
+      console.error(UTF8ToString(str));
     }
 
   function _emscripten_date_now() {
@@ -8172,7 +8630,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64","env.__syscall_lstat64"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];
@@ -8570,14 +9028,17 @@ function checkIncomingModuleAPI() {
 var asmLibraryArg = {
   "__assert_fail": ___assert_fail,
   "__call_sighandler": ___call_sighandler,
+  "__syscall_chdir": ___syscall_chdir,
   "__syscall_chmod": ___syscall_chmod,
   "__syscall_close": ___syscall_close,
   "__syscall_connect": ___syscall_connect,
   "__syscall_dup2": ___syscall_dup2,
+  "__syscall_execve": ___syscall_execve,
   "__syscall_faccessat": ___syscall_faccessat,
   "__syscall_fchmod": ___syscall_fchmod,
   "__syscall_fchown32": ___syscall_fchown32,
   "__syscall_fcntl64": ___syscall_fcntl64,
+  "__syscall_fork": ___syscall_fork,
   "__syscall_fstat64": ___syscall_fstat64,
   "__syscall_getpid": ___syscall_getpid,
   "__syscall_ioctl": ___syscall_ioctl,
@@ -8589,6 +9050,7 @@ var asmLibraryArg = {
   "__syscall_readv": ___syscall_readv,
   "__syscall_sendto": ___syscall_sendto,
   "__syscall_setpgid": ___syscall_setpgid,
+  "__syscall_setsid": ___syscall_setsid,
   "__syscall_socket": ___syscall_socket,
   "__syscall_stat64": ___syscall_stat64,
   "__syscall_write": ___syscall_write,
@@ -8601,6 +9063,7 @@ var asmLibraryArg = {
   "_tzset_js": __tzset_js,
   "abort": _abort,
   "alarm": _alarm,
+  "emscripten_console_error": _emscripten_console_error,
   "emscripten_date_now": _emscripten_date_now,
   "emscripten_get_now": _emscripten_get_now,
   "emscripten_log": _emscripten_log,
@@ -8625,13 +9088,13 @@ var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__w
 var _main = Module["_main"] = createExportWrapper("__main_argc_argv");
 
 /** @type {function(...*):?} */
+var _free = Module["_free"] = createExportWrapper("free");
+
+/** @type {function(...*):?} */
 var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
 
 /** @type {function(...*):?} */
 var _malloc = Module["_malloc"] = createExportWrapper("malloc");
-
-/** @type {function(...*):?} */
-var _free = Module["_free"] = createExportWrapper("free");
 
 /** @type {function(...*):?} */
 var _fflush = Module["_fflush"] = createExportWrapper("fflush");
@@ -8640,10 +9103,10 @@ var _fflush = Module["_fflush"] = createExportWrapper("fflush");
 var _htons = Module["_htons"] = createExportWrapper("htons");
 
 /** @type {function(...*):?} */
-var _ntohs = Module["_ntohs"] = createExportWrapper("ntohs");
+var _raise = Module["_raise"] = createExportWrapper("raise");
 
 /** @type {function(...*):?} */
-var _raise = Module["_raise"] = createExportWrapper("raise");
+var _ntohs = Module["_ntohs"] = createExportWrapper("ntohs");
 
 /** @type {function(...*):?} */
 var _emscripten_stack_init = Module["_emscripten_stack_init"] = function() {
@@ -8709,8 +9172,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 6052;
-var ___stop_em_js = Module['___stop_em_js'] = 6670;
+var ___start_em_js = Module['___start_em_js'] = 6772;
+var ___stop_em_js = Module['___stop_em_js'] = 7390;
 
 
 

@@ -83,6 +83,7 @@ ssize_t vfs_write(int fildes, const void *buf, size_t nbyte);
 int vfs_ioctl(int fd, int op);
 
 int vfs_stat(const char * pathname, struct stat * buf, struct vnode ** vnode);
+int vfs_lstat(const char * pathname, struct stat * buf, struct vnode ** vnode);
 
 void vfs_dump();
 

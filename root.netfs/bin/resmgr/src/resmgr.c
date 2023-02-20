@@ -679,7 +679,7 @@ int main() {
       
       emscripten_log(EM_LOG_CONSOLE, "STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
 
-      struct stat stat_buf;;
+      struct stat stat_buf;
       struct vnode * vnode;
 
       int res = vfs_stat((const char *)msg->_u.stat_msg.pathname_or_buf, &stat_buf, &vnode);
@@ -719,6 +719,56 @@ int main() {
     else if (msg->msg_id == (STAT|0x80)) {
 
       emscripten_log(EM_LOG_CONSOLE, "Response from STAT from %d", msg->pid);
+
+      // Forward response to process
+      
+      sendto(sock, buf, 1256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
+      
+    }
+    else if (msg->msg_id == LSTAT) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "LSTAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
+
+      struct stat stat_buf;
+      struct vnode * vnode;
+
+      int res = vfs_lstat((const char *)msg->_u.stat_msg.pathname_or_buf, &stat_buf, &vnode);
+
+      if (res == 0) {
+
+	if (vnode == NULL) {
+
+	  msg->msg_id |= 0x80;
+	  msg->_errno = 0;
+
+	  msg->_u.stat_msg.len = sizeof(struct stat);
+	  memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
+	  
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	}
+	else {
+
+	  struct sockaddr_un driver_addr;
+
+	  driver_addr.sun_family = AF_UNIX;
+	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+
+	}
+      }
+      else {
+
+	msg->msg_id |= 0x80;
+	msg->_errno = ENOENT;
+
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	
+      }
+    }
+    else if (msg->msg_id == (LSTAT|0x80)) {
+
+      emscripten_log(EM_LOG_CONSOLE, "Response from LSTAT from %d", msg->pid);
 
       // Forward response to process
       

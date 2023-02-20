@@ -529,7 +529,7 @@ static void init_tty(struct login_context *cxt)
 
 	get_terminal_name(&cxt->tty_path, &cxt->tty_name, &cxt->tty_number);
 
-	emscripten_log(EM_LOG_CONSOLE,"get_terminal_name: %s %s %d", cxt->tty_path, cxt->tty_name, cxt->tty_number);
+	emscripten_log(EM_LOG_CONSOLE,"get_terminal_name: %s %s %s", cxt->tty_path, cxt->tty_name, cxt->tty_number);
 
 	/*
 	 * In case login is suid it was possible to use a hardlink as stdin
@@ -548,6 +548,8 @@ static void init_tty(struct login_context *cxt)
 		sleepexit(EXIT_FAILURE);
 	}
 
+	emscripten_log(EM_LOG_CONSOLE,"good tty");
+
 #ifdef LOGIN_CHOWN_VCS
 	if (cxt->tty_number) {
 		/* find names of Virtual Console devices, for later mode change */
@@ -562,16 +564,22 @@ static void init_tty(struct login_context *cxt)
 	if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) < 0)
 		syslog(LOG_WARNING, _("TIOCGWINSZ ioctl failed: %m"));
 
+	emscripten_log(EM_LOG_CONSOLE,"tty ws: %d %d", ws.ws_row, ws.ws_col);
+
 	tcgetattr(0, &tt);
 	ttt = tt;
 	ttt.c_cflag &= ~HUPCL;
 
-	if ((fchown(0, 0, 0) || fchmod(0, cxt->tty_mode)) && errno != EROFS) {
+	/* BB: TODO */
+	/*if ((fchown(0, 0, 0) || fchmod(0, cxt->tty_mode)) && errno != EROFS) {
 
 		syslog(LOG_ERR, _("FATAL: %s: change permissions failed: %m"),
 				cxt->tty_path);
 		sleepexit(EXIT_FAILURE);
 	}
+
+	emscripten_log(EM_LOG_CONSOLE,"tty permissions changed");
+	*/
 
 	/* Kill processes left on this tty */
 	tcsetattr(0, TCSANOW, &ttt);
@@ -1092,6 +1100,8 @@ static void loginpam_session(struct login_context *cxt)
 	}
 }
 
+#endif
+
 /*
  * Detach the controlling terminal, fork, restore syslog stuff, and create
  * a new session.
@@ -1135,8 +1145,10 @@ static void fork_session(struct login_context *cxt)
 	if (child_pid < 0) {
 		warn(_("fork failed"));
 
+		#if 0
 		pam_setcred(cxt->pamh, PAM_DELETE_CRED);
 		pam_end(cxt->pamh, pam_close_session(cxt->pamh, 0));
+		#endif
 		sleepexit(EXIT_FAILURE);
 	}
 
@@ -1155,10 +1167,13 @@ static void fork_session(struct login_context *cxt)
 
 		/* wait as long as any child is there */
 		while (wait(NULL) == -1 && errno == EINTR) ;
+
+		#if 0
 		openlog("login", LOG_ODELAY, LOG_AUTHPRIV);
 
 		pam_setcred(cxt->pamh, PAM_DELETE_CRED);
 		pam_end(cxt->pamh, pam_close_session(cxt->pamh, 0));
+		#endif
 		exit(EXIT_SUCCESS);
 	}
 
@@ -1234,10 +1249,14 @@ static void init_environ(struct login_context *cxt)
 	 */
 	xsetenv("LOGNAME", pwd->pw_name, 1);
 
+	#if 0
 	env = pam_getenvlist(cxt->pamh);
 	for (i = 0; env && env[i]; i++)
 		putenv(env[i]);
+	#endif
 }
+
+#if 0
 
 /*
  * This is called for the -h option, initializes cxt->{hostname,hostaddress}.
@@ -1493,6 +1512,16 @@ int main(int argc, char **argv)
 	 */
 	loginpam_session(&cxt);
 
+	#else
+
+	/* BB: TODO */
+	/*cxt.pwd = ;
+
+	pwd = cxt.pwd;
+	cxt.username = pwd->pw_name;*/
+
+	#endif
+
 	/* committed to login -- turn off timeout */
 	alarm((unsigned int)0);
 	free(timeout_msg);
@@ -1501,8 +1530,10 @@ int main(int argc, char **argv)
 	endpwent();
 
 	log_utmp(&cxt);
-	log_audit(&cxt, 1);
-	log_lastlog(&cxt);
+
+	/* BB: TODO */
+	/*log_audit(&cxt, 1);
+	log_lastlog(&cxt);*/
 
 	chown_tty(&cxt);
 
@@ -1518,7 +1549,8 @@ int main(int argc, char **argv)
 
 	process_title_update(cxt.username);
 
-	log_syslog(&cxt);
+	/* BB: TODO */
+	/*log_syslog(&cxt);*/
 
 	if (!cxt.quiet)
 		display_login_messages();
@@ -1570,7 +1602,9 @@ int main(int argc, char **argv)
 	child_argv[child_argc++] = NULL;
 
 	/* http://www.linux-pam.org/Linux-PAM-html/adg-interface-by-app-expected.html#adg-pam_end */
+	#if 0
 	(void) pam_end(cxt.pamh, PAM_SUCCESS|PAM_DATA_SILENT);
+	#endif
 
 	execvp(child_argv[0], child_argv + 1);
 
@@ -1578,8 +1612,6 @@ int main(int argc, char **argv)
 		warn(_("couldn't exec shell script"));
 	else
 		warn(_("no shell"));
-
-	#endif
 
 	exit(EXIT_SUCCESS);
 }

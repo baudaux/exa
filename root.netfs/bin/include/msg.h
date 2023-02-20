@@ -49,6 +49,8 @@ enum message_id {
   READLINK,
   STAT,
   FSTAT,
+  LSTAT = 30,
+  
 };
 
 enum dev_type {
