@@ -374,6 +374,18 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
     break;
 
+  case TIOCNOTTY:
+
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
+
+    break;
+
+  case TIOCSCTTY:
+
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY");
+
+    break;
+
   default:
     break;
   }

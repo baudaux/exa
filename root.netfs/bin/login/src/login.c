@@ -154,6 +154,15 @@ static int child_pid = 0;
 static volatile sig_atomic_t got_sig = 0;
 static char *timeout_msg;
 
+/* Modified by Benoit Baudaux 21/02/2023 */
+struct passwd my_pwd = {
+
+  .pw_uid = 1,
+  .pw_gid = 1,
+  .pw_dir = "/",
+  .pw_shell = "/bin/bash"
+};
+
 #ifdef LOGIN_CHOWN_VCS
 /* true if the filedescriptor fd is a console tty, very Linux specific */
 static int is_consoletty(int fd)
@@ -444,6 +453,8 @@ static void display_login_messages(void)
 static void open_tty(const char *tty)
 {
 	int i, fd, flags;
+
+	emscripten_log(EM_LOG_CONSOLE,"open_tty: %s", tty);
 
 	fd = open(tty, O_RDWR | O_NONBLOCK);
 	if (fd == -1) {
@@ -1135,7 +1146,8 @@ static void fork_session(struct login_context *cxt)
 	sigaction(SIGHUP, &sa, NULL);
 	sigaction(SIGTERM, &sa, &oldsa_term);
 
-	closelog();
+	/* BB: TODO */
+	/*closelog();*/
 
 	/*
 	 * We must fork before setuid(), because we need to call
@@ -1196,13 +1208,17 @@ static void fork_session(struct login_context *cxt)
 
 	/* make sure we have a controlling tty */
 	open_tty(cxt->tty_path);
-	openlog("login", LOG_ODELAY, LOG_AUTHPRIV);	/* reopen */
+
+	/* BB: TODO */
+	/*openlog("login", LOG_ODELAY, LOG_AUTHPRIV);*/	/* reopen */
 
 	/*
 	 * TIOCSCTTY: steal tty from other process group.
 	 */
-	if (ioctl(0, TIOCSCTTY, 1))
-		syslog(LOG_ERR, _("TIOCSCTTY failed: %m"));
+
+	/* BB: TODO */
+	/*if (ioctl(0, TIOCSCTTY, 1))
+	  syslog(LOG_ERR, _("TIOCSCTTY failed: %m"));*/
 	signal(SIGINT, SIG_DFL);
 }
 
@@ -1215,6 +1231,8 @@ static void init_environ(struct login_context *cxt)
 	char *termenv, **env;
 	char tmp[PATH_MAX];
 	int len, i;
+
+	emscripten_log(EM_LOG_CONSOLE,"--> init_environ");
 
 	termenv = getenv("TERM");
 	if (termenv)
@@ -1254,6 +1272,10 @@ static void init_environ(struct login_context *cxt)
 	for (i = 0; env && env[i]; i++)
 		putenv(env[i]);
 	#endif
+
+	emscripten_log(EM_LOG_CONSOLE,"<-- init_environ");
+
+	
 }
 
 #if 0
@@ -1514,11 +1536,11 @@ int main(int argc, char **argv)
 
 	#else
 
-	/* BB: TODO */
-	/*cxt.pwd = ;
+	cxt.pwd = &my_pwd;
 
 	pwd = cxt.pwd;
-	cxt.username = pwd->pw_name;*/
+
+	pwd->pw_name = (char *)cxt.username;
 
 	#endif
 
@@ -1527,20 +1549,24 @@ int main(int argc, char **argv)
 	free(timeout_msg);
 	timeout_msg = NULL;
 
-	endpwent();
+	/* BB: TODO */
+	/*endpwent();*/
 
-	log_utmp(&cxt);
+	/* BB: TODO */
+	/*log_utmp(&cxt);*/
 
 	/* BB: TODO */
 	/*log_audit(&cxt, 1);
 	log_lastlog(&cxt);*/
 
-	chown_tty(&cxt);
+	/* BB: TODO */
+	/*chown_tty(&cxt);*/
 
-	if (setgid(pwd->pw_gid) < 0 && pwd->pw_gid) {
+	/* BB: TODO */
+	/*if (setgid(pwd->pw_gid) < 0 && pwd->pw_gid) {
 		syslog(LOG_ALERT, _("setgid() failed"));
 		exit(EXIT_FAILURE);
-	}
+		}*/
 
 	if (pwd->pw_shell == NULL || *pwd->pw_shell == '\0')
 		pwd->pw_shell = _PATH_BSHELL;
@@ -1552,8 +1578,9 @@ int main(int argc, char **argv)
 	/* BB: TODO */
 	/*log_syslog(&cxt);*/
 
-	if (!cxt.quiet)
-		display_login_messages();
+	/* BB: TODO */
+	/*if (!cxt.quiet)
+	  display_login_messages();*/
 
 	/*
 	 * Detach the controlling terminal, fork, and create a new session
@@ -1562,13 +1589,17 @@ int main(int argc, char **argv)
 	fork_session(&cxt);
 
 	/* discard permissions last so we can't get killed and drop core */
-	if (setuid(pwd->pw_uid) < 0 && pwd->pw_uid) {
+
+	/* BB: TODO */
+	/*if (setuid(pwd->pw_uid) < 0 && pwd->pw_uid) {
 		syslog(LOG_ALERT, _("setuid() failed"));
 		exit(EXIT_FAILURE);
-	}
+		}*/
 
 	/* wait until here to change directory! */
-	if (chdir(pwd->pw_dir) < 0) {
+
+	/* BB: TODO */
+	/*if (chdir(pwd->pw_dir) < 0) {
 		warn(_("%s: change directory failed"), pwd->pw_dir);
 
 		if (!getlogindefs_bool("DEFAULT_HOME", 1))
@@ -1577,7 +1608,7 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		pwd->pw_dir = "/";
 		printf(_("Logging in with home = \"/\".\n"));
-	}
+		}*/
 
 	/* if the shell field has a space: treat it like a shell script */
 	if (strchr(pwd->pw_shell, ' ')) {

@@ -360,7 +360,7 @@ int main() {
 
       int remote_fd = get_device(msg->_u.open_msg.minor)->open((const char *)(msg->_u.open_msg.pathname), msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
-      if (fd >= 0) {
+      if (remote_fd >= 0) {
 
 	msg->_u.open_msg.remote_fd = remote_fd;
 	msg->_errno = 0;

@@ -258,6 +258,32 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "OPEN from %d: %x %x %s", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
 
+      /* Special handling for /dev/tty */
+      if (strcmp((const char *)msg->_u.open_msg.pathname, "/dev/tty") == 0) {
+
+	struct vnode * vnode = process_get_ctty(msg->pid);
+
+	if (vnode) {
+
+	  emscripten_log(EM_LOG_CONSOLE, "ctty found");
+
+	  // Forward msg to driver
+
+	  msg->_u.open_msg.type = vnode->_u.dev.type;
+	  msg->_u.open_msg.major = vnode->_u.dev.major;
+	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
+	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+	  
+	  struct sockaddr_un driver_addr;
+
+	  driver_addr.sun_family = AF_UNIX;
+	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
+
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
+	  continue;
+	}
+      }
+
       int remote_fd = vfs_open((const char *)msg->_u.open_msg.pathname, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, vfs_minor);
       
       if (remote_fd == 0) {
@@ -616,7 +642,9 @@ int main() {
     }
     else if (msg->msg_id == IS_OPEN) {
 
-      emscripten_log(EM_LOG_CONSOLE, "IS_OPEN from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "IS_OPEN from %d: %d", msg->pid, msg->_u.is_open_msg.fd);
+
+      msg->_errno = ENOENT;
 
       if (process_get_fd(msg->pid, msg->_u.is_open_msg.fd, &msg->_u.is_open_msg.type, &msg->_u.is_open_msg.major, &msg->_u.is_open_msg.remote_fd) == 0) {
 
@@ -628,12 +656,12 @@ int main() {
 
 	  emscripten_log(EM_LOG_CONSOLE, "IS_OPEN found %d %d %d %s", msg->_u.is_open_msg.type, msg->_u.is_open_msg.major, msg->_u.is_open_msg.remote_fd, msg->_u.is_open_msg.peer);
 
-	  msg->msg_id |= 0x80;
 	  msg->_errno = 0;
-
-	  sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
 	}
       }
+      msg->msg_id |= 0x80;
+
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == READLINK) {
       

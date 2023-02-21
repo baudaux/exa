@@ -453,6 +453,11 @@ int process_set_ctty(pid_t pid, struct vnode * tty) {
   return 1;
 }
 
+struct vnode * process_get_ctty(pid_t pid) {
+
+  return processes[pid].term;
+}
+
 int process_dup(pid_t pid, int fd, int new_fd) {
 
   int i;

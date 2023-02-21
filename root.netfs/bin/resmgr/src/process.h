@@ -91,6 +91,7 @@ pid_t process_getpgid(pid_t pid);
 int process_setpgid(pid_t pid, pid_t pgid);
 
 int process_set_ctty(pid_t pid, struct vnode * tty);
+struct vnode * process_get_ctty(pid_t pid);
 
 int process_dup(pid_t pid, int fd, int new_fd);
 
