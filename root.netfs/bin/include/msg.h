@@ -50,6 +50,7 @@ enum message_id {
   STAT,
   FSTAT,
   LSTAT = 30,
+  SELECT,
   
 };
 
@@ -208,6 +209,14 @@ struct fstat_message {
   char buf[1024];
 };
 
+struct select_message {
+  
+  int fd;
+  int read_write; // 0: read, 1: write
+  int start_stop; // 1: start, 0: stop
+  int remote_fd;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -240,6 +249,7 @@ struct message {
     struct readlink_message readlink_msg;
     struct stat_message stat_msg;
     struct fstat_message fstat_msg;
+    struct select_message select_msg;
     
   } _u;
 };
