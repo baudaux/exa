@@ -5042,7 +5042,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_execve: argv="+argv+", envp="+envp);
+  	//console.log("__syscall_execve: argv="+argv+", envp="+envp);
   
   	// Use Asyncify for not returning from execve
   	
@@ -5192,7 +5192,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-        console.log("__syscall_fcntl: cmd="+cmd);
+        //console.log("__syscall_fcntl: cmd="+cmd);
   
         let ret = Asyncify.handleSleep(function (wakeUp) {
   
@@ -5212,7 +5212,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	    buf2[6] = (pid >> 16) & 0xff;
   	    buf2[7] = (pid >> 24) & 0xff;
   
-  	      console.log(Module['fd_table'][fd]);
+  	      //console.log(Module['fd_table'][fd]);
   
   	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
   
@@ -5261,13 +5261,13 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   	  if ( (fd in Module['fd_table']) && (Module['fd_table'][fd]) ) {
   
-  	      console.log("__syscall_fcntl: "+fd+" found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" found in fd_table");
   
   		do_fcntl();
   	    }
   	  else {
   
-  	      console.log("__syscall_fcntl: "+fd+" not found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" not found in fd_table");
   	      
   		let buf_size = 256;
   
@@ -5582,7 +5582,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	
   	/* ops 21505 (TCGETS), 21506 (TCSETS), 21515 (TCFLSH), 21523 (TIOCGWINSZ) */
   
-  	console.log("__syscall_ioctl: op="+op);
+  	//console.log("__syscall_ioctl: op="+op);
   	
   	var argp = SYSCALLS.get();
   
@@ -5927,7 +5927,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   				let minor = msg2.buf[30] | (msg2.buf[31] << 8);
   				let peer = UTF8ArrayToString(msg2.buf, 32, 108);
   
-  				console.log("__syscall_openat: peer=%s", peer);
+  				//console.log("__syscall_openat: peer=%s", peer);
   
   				var desc = {
   
@@ -6038,7 +6038,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   			let bytes_read = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
   
-  			console.log("bytes_read: "+bytes_read);
+  			//console.log("bytes_read: "+bytes_read);
   
   			Module.HEAPU8.set(msg2.buf.slice(20, 20+bytes_read), buf);
   			
@@ -6162,7 +6162,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_readv: TODO");
+  	//console.log("__syscall_readv: TODO");
   	return 0;
       } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
@@ -7929,7 +7929,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64","env.__syscall_lstat64"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64","env.__syscall_lstat64","env.__syscall_pselect6"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];

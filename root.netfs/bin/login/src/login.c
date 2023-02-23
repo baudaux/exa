@@ -1,3 +1,5 @@
+
+
 /*
  * login(1)
  *
@@ -7,6 +9,7 @@
  * Copyright (C) 2011 Karel Zak <kzak@redhat.com>
  * Rewritten to PAM-only version.
  *
+
  * Michael Glad (glad@daimi.dk)
  * Computer Science Department, Aarhus University, Denmark
  * 1990-07-04

@@ -5026,7 +5026,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_execve: argv="+argv+", envp="+envp);
+  	//console.log("__syscall_execve: argv="+argv+", envp="+envp);
   
   	// Use Asyncify for not returning from execve
   	
@@ -5189,7 +5189,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-        console.log("__syscall_fcntl: cmd="+cmd);
+        //console.log("__syscall_fcntl: cmd="+cmd);
   
         let ret = Asyncify.handleSleep(function (wakeUp) {
   
@@ -5209,7 +5209,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	    buf2[6] = (pid >> 16) & 0xff;
   	    buf2[7] = (pid >> 24) & 0xff;
   
-  	      console.log(Module['fd_table'][fd]);
+  	      //console.log(Module['fd_table'][fd]);
   
   	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
   
@@ -5258,13 +5258,13 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   	  if ( (fd in Module['fd_table']) && (Module['fd_table'][fd]) ) {
   
-  	      console.log("__syscall_fcntl: "+fd+" found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" found in fd_table");
   
   		do_fcntl();
   	    }
   	  else {
   
-  	      console.log("__syscall_fcntl: "+fd+" not found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" not found in fd_table");
   	      
   		let buf_size = 256;
   
@@ -5414,7 +5414,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   	    let pid = parseInt(window.frameElement.getAttribute('pid'));
   
-  	    console.log("fork: pid="+pid);
+  	    //console.log("fork: pid="+pid);
   
   	    function do_fork() {
   
@@ -5482,7 +5482,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		let bc = Module.get_broadcast_channel("/var/resmgr.peer");
   
-  		console.log(bc);
+  		//console.log(bc);
   
   		let buf = new Uint8Array(256);
   
@@ -5513,7 +5513,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   		    
-  		    console.log(messageEvent);
+  		    //console.log(messageEvent);
   
   		    let msg2 = messageEvent.data;
   
@@ -5553,7 +5553,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_fstat64: fd="+fd);
+  	//console.log("__syscall_fstat64: fd="+fd);
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
@@ -5595,7 +5595,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   			    let len = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
   
-  			    console.log("__syscall_fstat64: len="+len);
+  			    //console.log("__syscall_fstat64: len="+len);
   
   			    Module.HEAPU8.set(msg2.buf.slice(20, 20+len), buf);
   
@@ -5825,7 +5825,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	
   	/* ops 21505 (TCGETS), 21506 (TCSETS), 21515 (TCFLSH), 21523 (TIOCGWINSZ) */
   
-  	console.log("__syscall_ioctl: op="+op);
+  	//console.log("__syscall_ioctl: op="+op);
   	
   	var argp = SYSCALLS.get();
   
@@ -6077,7 +6077,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_lstat64: "+SYSCALLS.getStr(path));
+  	//console.log("__syscall_lstat64: "+SYSCALLS.getStr(path));
   
   	let ret = Asyncify.handleSleep(function (wakeUp) {
   
@@ -6134,13 +6134,13 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
   
-  		    console.log("__syscall_lstat64: _errno="+_errno);
+  		    //console.log("__syscall_lstat64: _errno="+_errno);
   
   		    if (_errno == 0) {
   
   			let len = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
   
-  			console.log("__syscall_lstat64: len="+len);
+  			//console.log("__syscall_lstat64: len="+len);
   
   			Module.HEAPU8.set(msg2.buf.slice(16, 16+len), buf);
   
@@ -6185,7 +6185,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_newfstatat");
+  	//console.log("__syscall_newfstatat");
   	
   	/* Modified by Benoit Baudaux 8/2/2023 */
       /*path = SYSCALLS.getStr(path);
@@ -6298,7 +6298,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   				let minor = msg2.buf[30] | (msg2.buf[31] << 8);
   				let peer = UTF8ArrayToString(msg2.buf, 32, 108);
   
-  				console.log("__syscall_openat: peer=%s", peer);
+  				//console.log("__syscall_openat: peer=%s", peer);
   
   				var desc = {
   
@@ -6409,7 +6409,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   			let bytes_read = msg2.buf[16] | (msg2.buf[17] << 8) | (msg2.buf[18] << 16) |  (msg2.buf[19] << 24);
   
-  			console.log("bytes_read: "+bytes_read);
+  			//console.log("bytes_read: "+bytes_read);
   
   			Module.HEAPU8.set(msg2.buf.slice(20, 20+bytes_read), buf);
   			
@@ -6563,7 +6563,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   	    path_len++;
   
-  	    buf2.set(Module.HEAPU8.slice(path,path+path_len), 20);
+  	    buf2.set(Module.HEAPU8.slice(path, path+path_len), 20);
   
   	    buf2[16] = path_len & 0xff;
   	    buf2[17] = (path_len >> 8) & 0xff;
@@ -6578,7 +6578,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		if (msg2.buf[0] == (27|0x80)) {
   
-  		    console.log(messageEvent);
+  		    //console.log(messageEvent);
   		    
   		    // TODO: check bufsize
   
@@ -6586,7 +6586,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		    Module.HEAPU8.set(msg2.buf.slice(20, 20+len), buf);
   
-  		    wakeUp(len);
+  		    wakeUp(len-1); // Remove last zero frol len
   
   		    return 0;
   		}
@@ -6608,20 +6608,8 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	});
   
   	return ret;
-  
-        /*path = SYSCALLS.getStr(path);
-      path = SYSCALLS.calculateAt(dirfd, path);
-      if (bufsize <= 0) return -28;
-      var ret = FS.readlink(path);
-  
-      var len = Math.min(bufsize, lengthBytesUTF8(ret));
-      var endChar = HEAP8[buf+len];
-      stringToUTF8(ret, buf, bufsize+1);
-      // readlink is one of the rare functions that write out a C string, but does never append a null to the output buffer(!)
-      // stringToUTF8() always appends a null byte, so restore the character under the null byte after the write.
-      HEAP8[buf+len] = endChar;
-      return len;*/
-    } catch (e) {
+  	
+  	} catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
     return -e.errno;
   }
@@ -6631,7 +6619,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   try {
   
   
-  	console.log("__syscall_readv: TODO");
+  	//console.log("__syscall_readv: TODO");
   	return 0;
       } catch (e) {
     if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
@@ -7003,7 +6991,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   	    buf2[14] = (path_len >> 16) & 0xff;
   	    buf2[15] = (path_len >> 24) & 0xff;
   
-  	    buf2.set(Module.HEAPU8.slice(path,path+path_len), 16);
+  	    buf2.set(Module.HEAPU8.slice(path, path+path_len), 16);
   	    
   	    Module['rcv_bc_channel'].set_handler( (messageEvent) => {
   
@@ -7017,13 +7005,13 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   
   		    let _errno = msg2.buf[8] | (msg2.buf[9] << 8) | (msg2.buf[10] << 16) |  (msg2.buf[11] << 24);
   
-  		    console.log("__syscall_stat64: _errno="+_errno);
+  		    //console.log("__syscall_stat64: _errno="+_errno);
   
   		    if (_errno == 0) {
   
   			let len = msg2.buf[12] | (msg2.buf[13] << 8) | (msg2.buf[14] << 16) |  (msg2.buf[15] << 24);
   
-  			console.log("__syscall_stat64: len="+len);
+  			//console.log("__syscall_stat64: len="+len);
   
   			Module.HEAPU8.set(msg2.buf.slice(16, 16+len), buf);
   
@@ -8672,7 +8660,7 @@ function environ_get(env,buf) { if (Module['env']) { Module.HEAPU8.set(Module['e
   function runtimeKeepalivePop() {
     }
   var Asyncify = {instrumentWasmImports:function(imports) {
-        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64","env.__syscall_lstat64"].map((x) => x.split('.')[1]);
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*","env.__syscall_ioctl","env.__syscall_fcntl64","env.__syscall_fork","env.__syscall_execve","env.__syscall_socket","env.__syscall_recvfrom","env.__syscall_bind","env.__syscall_openat","env.__syscall_close","env.__syscall_write","env.__syscall_writev","env.__syscall_getsid","env.__syscall_setsid","env.__syscall_read","env.__syscall_readv","env.__syscall_pause","env.__syscall_dup","env.__syscall_dup2","env.__syscall_getpgid","env.__syscall_setpgid","env.__syscall_getppid","env.__syscall_readlinkat","env.__syscall_stat64","env.__syscall_fstat64","env.__syscall_lstat64","env.__syscall_pselect6"].map((x) => x.split('.')[1]);
         for (var x in imports) {
           (function(x) {
             var original = imports[x];

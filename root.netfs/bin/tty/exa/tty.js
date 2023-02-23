@@ -4887,7 +4887,7 @@ function write_terminal(buf,len) { let msg = { from: "/var/tty.peer", write: 1, 
   try {
   
   
-        console.log("__syscall_fcntl: cmd="+cmd);
+        //console.log("__syscall_fcntl: cmd="+cmd);
   
         let ret = Asyncify.handleSleep(function (wakeUp) {
   
@@ -4907,7 +4907,7 @@ function write_terminal(buf,len) { let msg = { from: "/var/tty.peer", write: 1, 
   	    buf2[6] = (pid >> 16) & 0xff;
   	    buf2[7] = (pid >> 24) & 0xff;
   
-  	      console.log(Module['fd_table'][fd]);
+  	      //console.log(Module['fd_table'][fd]);
   
   	    let remote_fd = (fd >= 0)? Module['fd_table'][fd].remote_fd : -1;
   
@@ -4956,13 +4956,13 @@ function write_terminal(buf,len) { let msg = { from: "/var/tty.peer", write: 1, 
   
   	  if ( (fd in Module['fd_table']) && (Module['fd_table'][fd]) ) {
   
-  	      console.log("__syscall_fcntl: "+fd+" found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" found in fd_table");
   
   		do_fcntl();
   	    }
   	  else {
   
-  	      console.log("__syscall_fcntl: "+fd+" not found in fd_table");
+  	      //console.log("__syscall_fcntl: "+fd+" not found in fd_table");
   	      
   		let buf_size = 256;
   
@@ -6602,8 +6602,8 @@ var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrap
 /** @type {function(...*):?} */
 var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
-var ___start_em_js = Module['___start_em_js'] = 2416;
-var ___stop_em_js = Module['___stop_em_js'] = 2860;
+var ___start_em_js = Module['___start_em_js'] = 1776;
+var ___stop_em_js = Module['___stop_em_js'] = 2220;
 
 
 

@@ -252,7 +252,7 @@ static void extract_chars(struct device_desc * dev, size_t len, unsigned char * 
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
+  //emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
 
   ++last_fd;
 
@@ -290,8 +290,6 @@ static ssize_t local_tty_read(int fd, void * buf, size_t len) {
       
     size_t sent_len = (len2 <= len)?len2:len;
 
-    //emscripten_log(EM_LOG_CONSOLE, "dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
-	
     extract_chars(dev, sent_len, buf);
 
     return sent_len;
@@ -344,7 +342,7 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
 static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
   
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
+  //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
   
   switch(op) {
 
@@ -356,7 +354,7 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TCGETS:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCGETS");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCGETS");
 
     memcpy(buf, &(get_device_from_fd(fd)->ctrl), sizeof(struct termios));
 
@@ -366,7 +364,7 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
   case TCSETSW:
   case TCSETSF:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCSETS");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCSETS");
 
     memcpy(&(get_device_from_fd(fd)->ctrl), buf, sizeof(struct termios));
 
@@ -374,13 +372,13 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TCFLSH:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCFLSH");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TCFLSH");
     
     break;
 
   case TIOCGPGRP:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCGPGRP");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCGPGRP");
 
     if (get_device_from_fd(fd)->pgrp < 0)
       return -1;
@@ -391,7 +389,7 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TIOCSPGRP:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
 
     memcpy(&(get_device_from_fd(fd)->pgrp), buf, sizeof(int));
 
@@ -399,13 +397,13 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TIOCNOTTY:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
 
     break;
 
   case TIOCSCTTY:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY");
 
     break;
 
@@ -428,8 +426,6 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
   unsigned char * data = (unsigned char *)buf;
 
   unsigned char echo_buf[1024];
-  
-  //emscripten_log(EM_LOG_CONSOLE, "enqueue: %d", data[0]);
 
   int j = 0;
 
@@ -461,8 +457,8 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
     
     if (data[i] == dev->ctrl.c_cc[VERASE]) {
 
-      if (dev->ctrl.c_lflag & (ICANON | ECHOE)) {
-
+      if ( (dev->ctrl.c_lflag & (ICANON | ECHOE)) == (ICANON | ECHOE)) {
+	
 	// erase previous char (if any)
 
 	if (del_char(dev) >= 0) {
@@ -478,12 +474,13 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       else {
 
 	// enqueue
+	add_char(dev, data[i]);
       }
     
     }
     else if (data[i] == dev->ctrl.c_cc[VWERASE]) {
 
-      if (dev->ctrl.c_lflag & (ICANON | ECHOE)) {
+      if ( (dev->ctrl.c_lflag & (ICANON | ECHOE)) == (ICANON | ECHOE)) {
 
 	// erase previous word
 
@@ -492,12 +489,13 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       else {
 
 	// enqueue
+	add_char(dev, data[i]);
       }
     
     }
     else if (data[i] == dev->ctrl.c_cc[VKILL]) {
 
-      if (dev->ctrl.c_lflag & (ICANON | ECHOK)) {
+      if ( (dev->ctrl.c_lflag & (ICANON | ECHOK)) == (ICANON | ECHOK)) {
 
 	// erase current line
 
@@ -506,6 +504,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       else {
 
 	// enqueue
+	add_char(dev, data[i]);
       }
     
     }
@@ -563,7 +562,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       
 	reply_msg->_u.io_msg.len = sent_len;
 
-	//emscripten_log(EM_LOG_CONSOLE, "dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
+	//emscripten_log(EM_LOG_CONSOLE, "(2) dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
 	
 	extract_chars(dev, sent_len, reply_msg->_u.io_msg.buf);
 
@@ -572,7 +571,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
     }
     else if (dev->read_select_pending.fd >= 0) {
 
-      emscripten_log(EM_LOG_CONSOLE, "read_select_pending.fd >= 0");
+      //emscripten_log(EM_LOG_CONSOLE, "read_select_pending.fd >= 0");
 
       reply_msg->msg_id = SELECT|0x80;
       reply_msg->pid = dev->read_select_pending.pid;
@@ -581,7 +580,6 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       reply_msg->_u.select_msg.fd = dev->read_select_pending.fd;
       reply_msg->_u.select_msg.read_write = 0; // read
     }
-    
   }
   
   return 0;
@@ -596,7 +594,15 @@ static void add_read_select_pending_request(pid_t pid, int remote_fd, int fd, st
   dev->read_select_pending.fd = fd;
   memcpy(&dev->read_select_pending.client_addr, sock_addr, sizeof(struct sockaddr_un));
 
-  emscripten_log(EM_LOG_CONSOLE, "add_read_select_pending_request: %s", dev->read_select_pending.client_addr.sun_path);
+  //emscripten_log(EM_LOG_CONSOLE, "add_read_select_pending_request: %s", dev->read_select_pending.client_addr.sun_path);
+}
+
+static void del_read_select_pending_request(pid_t pid, int remote_fd, int fd, struct sockaddr_un * sock_addr) {
+
+  struct device_desc * dev = get_device_from_fd(remote_fd);
+
+  dev->read_select_pending.remote_fd = -1;
+  dev->read_select_pending.fd = -1;
 }
 
 static int local_tty_select(pid_t pid, int remote_fd, int fd, int read_write, int start_stop, struct sockaddr_un * sock_addr) {
@@ -620,6 +626,10 @@ static int local_tty_select(pid_t pid, int remote_fd, int fd, int read_write, in
 	add_read_select_pending_request(pid, remote_fd, fd, sock_addr);
       }
     }
+  }
+  else { // stop
+
+    del_read_select_pending_request(pid, remote_fd, fd, sock_addr);
   }
   
   return 0;
@@ -752,9 +762,10 @@ int main() {
 
 	struct device_desc * dev = get_device(1);
 
-	emscripten_log(EM_LOG_CONSOLE, "Reply to select: %s", dev->read_select_pending.client_addr.sun_path);
+	//emscripten_log(EM_LOG_CONSOLE, "Reply to select: %s", dev->read_select_pending.client_addr.sun_path);
 
 	dev->read_select_pending.fd = -1; // unset read select pending
+	dev->read_select_pending.remote_fd = -1;
 
 	sendto(sock, reply_buf, 256, 0, (struct sockaddr *) &dev->read_select_pending.client_addr, sizeof(dev->read_select_pending.client_addr));
       }
@@ -765,15 +776,15 @@ int main() {
       if (msg->_errno)
 	continue;
 
-      emscripten_log(EM_LOG_CONSOLE, "REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
+      //emscripten_log(EM_LOG_CONSOLE, "REGISTER_DEVICE successful: %d,%d,%d", msg->_u.dev_msg.dev_type, msg->_u.dev_msg.major, msg->_u.dev_msg.minor);
     }
     else if (msg->msg_id == OPEN) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d, %d", msg->pid, msg->_u.open_msg.minor);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d, %d", msg->pid, msg->_u.open_msg.minor);
 
       int remote_fd = get_device(msg->_u.open_msg.minor)->ops->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN -> %d", remote_fd);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: OPEN -> %d", remote_fd);
 
       msg->_u.open_msg.remote_fd = remote_fd;
 
@@ -783,7 +794,7 @@ int main() {
     }
     else if (msg->msg_id == READ) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d: %d", msg->pid, msg->_u.io_msg.len);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: READ from %d: %d", msg->pid, msg->_u.io_msg.len);
 
       int count = get_device_from_fd(msg->_u.io_msg.fd)->ops->read(msg->_u.io_msg.fd, msg->_u.io_msg.buf, msg->_u.io_msg.len);
       
@@ -817,7 +828,7 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
 
       msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len);
 
@@ -826,7 +837,7 @@ int main() {
     }
     else if (msg->msg_id == FCNTL) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: FCNTL from %d", msg->pid);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: FCNTL from %d", msg->pid);
 
       // TODO: go through resmgr
 
@@ -835,7 +846,7 @@ int main() {
     }
     else if (msg->msg_id == CLOSE) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: CLOSE from %d, %d", msg->pid, msg->_u.close_msg.fd);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: CLOSE from %d, %d", msg->pid, msg->_u.close_msg.fd);
 
       // very temporary
       clients[msg->_u.close_msg.fd].pid = -1;
@@ -846,7 +857,7 @@ int main() {
     }
     else if (msg->msg_id == STAT) {
       
-      emscripten_log(EM_LOG_CONSOLE, "tty: STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
 
       char * tty = strrchr(msg->_u.stat_msg.pathname_or_buf, '/')+1;
 
@@ -854,14 +865,14 @@ int main() {
 
 	int min = atoi(tty+3);
 	
-	emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
+	//emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
 
 	struct stat stat_buf;
 
 	stat_buf.st_dev = makedev(major, min);
 	stat_buf.st_ino = (ino_t)&devices[min];
 
-	emscripten_log(EM_LOG_CONSOLE, "tty: STAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+	//emscripten_log(EM_LOG_CONSOLE, "tty: STAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
 
 	msg->_u.stat_msg.len = sizeof(struct stat);
 	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
@@ -887,7 +898,7 @@ int main() {
 
 	int min = atoi(tty+3);
 	
-	emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
+	//emscripten_log(EM_LOG_CONSOLE, "tty: min=%d", min);
 
 	struct stat stat_buf;
 
@@ -895,7 +906,7 @@ int main() {
 	stat_buf.st_ino = (ino_t)&devices[min];
 	stat_buf.st_mode = S_IFCHR;
 
-	emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+	//emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
 	
 	msg->_u.stat_msg.len = sizeof(struct stat);
 	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
@@ -913,7 +924,7 @@ int main() {
     }
     else if (msg->msg_id == FSTAT) {
       
-      emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT from %d: %d -> minor=%d", msg->pid, msg->_u.fstat_msg.fd, clients[msg->_u.fstat_msg.fd].minor);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT from %d: %d -> minor=%d", msg->pid, msg->_u.fstat_msg.fd, clients[msg->_u.fstat_msg.fd].minor);
 
       struct stat stat_buf;
 
@@ -923,7 +934,7 @@ int main() {
       stat_buf.st_ino = (ino_t)&devices[min];
       stat_buf.st_mode = S_IFCHR;
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: FSTAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
 
       msg->_u.fstat_msg.len = sizeof(struct stat);
       memcpy(msg->_u.fstat_msg.buf, &stat_buf, sizeof(struct stat));
@@ -936,7 +947,7 @@ int main() {
     }
     else if (msg->msg_id == SELECT) {
       
-      emscripten_log(EM_LOG_CONSOLE, "tty: SELECT from %d: %d %d %d (%x)", msg->pid, msg->_u.select_msg.fd, msg->_u.select_msg.read_write, msg->_u.select_msg.start_stop, get_device_from_fd(msg->_u.select_msg.remote_fd)->ops->select);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: SELECT from %d: %d %d %d (%x)", msg->pid, msg->_u.select_msg.fd, msg->_u.select_msg.read_write, msg->_u.select_msg.start_stop, get_device_from_fd(msg->_u.select_msg.remote_fd)->ops->select);
 
       if (get_device_from_fd(msg->_u.select_msg.remote_fd)->ops->select(msg->pid, msg->_u.select_msg.remote_fd, msg->_u.select_msg.fd, msg->_u.select_msg.read_write, msg->_u.select_msg.start_stop, &remote_addr) > 0) {
 
