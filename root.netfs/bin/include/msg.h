@@ -51,6 +51,7 @@ enum message_id {
   FSTAT,
   LSTAT = 30,
   SELECT,
+  SCTTY,
   
 };
 
@@ -94,6 +95,7 @@ struct open_message {
   unsigned short minor;
   unsigned char peer[108];
   unsigned char pathname[1024];
+  int sid;
 };
 
 struct close_message {
@@ -217,6 +219,13 @@ struct select_message {
   int remote_fd;
 };
 
+struct sctty_message {
+
+  int minor;
+  int tty_session;
+  int arg;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -250,6 +259,7 @@ struct message {
     struct stat_message stat_msg;
     struct fstat_message fstat_msg;
     struct select_message select_msg;
+    struct sctty_message sctty_msg;
     
   } _u;
 };

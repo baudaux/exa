@@ -292,6 +292,21 @@ int main() {
 
 	emscripten_log(EM_LOG_CONSOLE, "vnode is a device or mount point: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
+	msg->_u.open_msg.sid = 0;
+	
+	if ( (vnode->_u.dev.major == 1) && (!(msg->_u.open_msg.flags & O_NOCTTY )) ) {
+	  struct vnode * ctty = process_get_ctty(msg->pid);
+
+	  if (!ctty) { // process has no controlling tty
+
+	    emscripten_log(EM_LOG_CONSOLE, "process has no controlling tty: session=%d", process_getsid(msg->pid));
+
+	    msg->_u.open_msg.sid = process_getsid(msg->pid);
+
+	    process_set_ctty(msg->pid, vnode); // temporary, to be confirmed by the returned message
+	  }
+	}
+
 	// Forward msg to driver
 
 	msg->_u.open_msg.type = vnode->_u.dev.type;
@@ -346,12 +361,18 @@ int main() {
 	// Add /proc/<pid>/fd/<fd> entry
 	process_add_proc_fd_entry(msg->pid, msg->_u.open_msg.fd, (char *)msg->_u.open_msg.pathname);
 
-	if ( (msg->_u.open_msg.major == 1) && (!(msg->_u.open_msg.flags & O_NOCTTY )) ) {
+	if (msg->_u.open_msg.sid < 0) {
 
-	  if (process_set_ctty(msg->pid, vfs_get_vnode(0))) {
+	  process_set_ctty(msg->pid, NULL); // Cancel controlling tty
+	}
+      }
+      else {
 
-	    // TODO: send message to driver
-	  }
+	if (msg->_u.open_msg.sid) {
+
+	  // Open failed so cancel controlling tty
+
+	  process_set_ctty(msg->pid, NULL);
 	}
       }
 
@@ -802,6 +823,17 @@ int main() {
       
       sendto(sock, buf, 1256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
       
+    }
+    else if (msg->msg_id == SCTTY) {
+
+      emscripten_log(EM_LOG_CONSOLE, "SCTTY from %d (%d)", msg->pid, process_getsid(msg->pid));
+
+      emscripten_log(EM_LOG_CONSOLE, "minor=%d tty_session=%d arg=%d", msg->_u.sctty_msg.minor, msg->_u.sctty_msg.tty_session, msg->_u.sctty_msg.arg);
+
+      msg->msg_id |= 0x80;
+      msg->_errno = 0;
+      
+      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
   }
   

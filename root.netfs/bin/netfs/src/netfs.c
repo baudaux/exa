@@ -252,10 +252,12 @@ int main() {
   
   emscripten_log(EM_LOG_CONSOLE, "Starting " NETFS_VERSION "...");
 
-  int fd = open("/dev/tty1", O_RDWR);
+  int fd = open("/dev/tty1", O_WRONLY | O_NOCTTY);
   
   if (fd >= 0)
     write(fd, "\n\r[" NETFS_VERSION "]", strlen("\n\r[" NETFS_VERSION "]")+1);
+
+  close(fd);
   
   /* Create the server local socket */
   sock = socket (AF_UNIX, SOCK_DGRAM, 0);

@@ -79,7 +79,7 @@ struct device_desc {
   struct select_pending_request read_select_pending;
 
   int session;
-  int pgrp;
+  int fg_pgrp;
 };
 
 struct client {
@@ -150,7 +150,7 @@ int register_device(unsigned short minor, struct device_ops * dev_ops) {
   devices[minor].end = 0;
 
   devices[minor].session = -1;
-  devices[minor].pgrp = -1;
+  devices[minor].fg_pgrp = -1;
 
   return 0;
 }
@@ -252,11 +252,13 @@ static void extract_chars(struct device_desc * dev, size_t len, unsigned char * 
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
-  //emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
+  emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
 
   ++last_fd;
 
   add_client(last_fd, pid, minor, flags, mode);
+
+  emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: %d %d", get_device_from_fd(last_fd)->session, get_device_from_fd(last_fd)->fg_pgrp);
   
   return last_fd;
 }
@@ -342,7 +344,7 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
 static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
   
-  //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
+  emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
   
   switch(op) {
 
@@ -380,30 +382,30 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
     //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCGPGRP");
 
-    if (get_device_from_fd(fd)->pgrp < 0)
+    if (get_device_from_fd(fd)->fg_pgrp < 0)
       return -1;
 
-    memcpy(buf, &(get_device_from_fd(fd)->pgrp), sizeof(int));
+    memcpy(buf, &(get_device_from_fd(fd)->fg_pgrp), sizeof(int));
     
     break;
 
   case TIOCSPGRP:
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
 
-    memcpy(&(get_device_from_fd(fd)->pgrp), buf, sizeof(int));
+    memcpy(&(get_device_from_fd(fd)->fg_pgrp), buf, sizeof(int));
 
     break;
 
   case TIOCNOTTY:
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
 
     break;
 
   case TIOCSCTTY:
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY");
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY (%d %d)", get_device_from_fd(fd)->session, get_device_from_fd(fd)->fg_pgrp);
 
     break;
 
@@ -787,6 +789,21 @@ int main() {
       //emscripten_log(EM_LOG_CONSOLE, "tty: OPEN -> %d", remote_fd);
 
       msg->_u.open_msg.remote_fd = remote_fd;
+      
+      if (msg->_u.open_msg.sid) {
+
+	if (get_device_from_fd(remote_fd)->session < 0) {
+
+	  emscripten_log(EM_LOG_CONSOLE, "!!!! tty: set controlling tty of session %d", msg->_u.open_msg.sid);
+
+	  // tty is not yet controlled so it is now controlling the sid session
+	  get_device_from_fd(msg->_u.io_msg.fd)->session = msg->_u.open_msg.sid;
+	}
+	else {
+
+	  msg->_u.open_msg.sid = -1; // == cancel controlling tty
+	}
+      }
 
       msg->msg_id |= 0x80;
       sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));     
@@ -828,12 +845,36 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
+      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
 
       msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len);
 
-      msg->msg_id |= 0x80;
-      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+      /*if (msg->_u.ioctl_msg.op == TIOCSCTTY) {
+
+	struct sockaddr_un resmgr_addr = {
+	  .sun_family = AF_UNIX,
+	  .sun_path = "/var/resmgr.peer",
+	};
+	
+	struct message msg2;
+
+	msg2.msg_id = SCTTY;
+	msg2.pid = msg->pid;
+	msg2._u.sctty_msg.minor = clients[msg->_u.ioctl_msg.fd].minor; 
+	msg2._u.sctty_msg.tty_session = get_device_from_fd(msg->_u.ioctl_msg.fd)->session;
+	memcpy(&(msg2._u.sctty_msg.arg), buf, sizeof(int));
+	
+	sendto(sock, &msg2, sizeof(struct message), 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
+      }
+      else {*/
+	
+	msg->msg_id |= 0x80;
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	/*}*/
+    }
+    else if (msg->msg_id == (SCTTY|0x80)) {
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: response from SCTTY from %d", msg->pid);
     }
     else if (msg->msg_id == FCNTL) {
 
