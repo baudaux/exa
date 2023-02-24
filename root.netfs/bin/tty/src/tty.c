@@ -855,6 +855,7 @@ int main() {
 	  .sun_family = AF_UNIX,
 	  .sun_path = "/var/resmgr.peer",
 	};
+
 	
 	struct message msg2;
 
