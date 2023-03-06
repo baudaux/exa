@@ -25,6 +25,8 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 
+#include <sys/timerfd.h>
+
 #include "msg.h"
 
 #include <emscripten.h>
@@ -36,7 +38,7 @@
 
 #define NB_TTY_MAX  16
 
-#define TTY_BUF_SIZE 1024
+#define TTY_BUF_SIZE 4096
 
 struct device_ops {
 
@@ -65,18 +67,27 @@ struct select_pending_request {
   struct sockaddr_un client_addr;
 };
 
+struct circular_buffer {
+
+  unsigned char buf[TTY_BUF_SIZE];
+  unsigned long start;
+  unsigned long end;
+};
+
 struct device_desc {
 
   struct termios ctrl;
   struct device_ops * ops;
   struct winsize ws;
 
-  unsigned char buf[TTY_BUF_SIZE]; // circular buffer
-  unsigned long start;
-  unsigned long end;
-
   struct pending_request read_pending;
   struct select_pending_request read_select_pending;
+
+  struct circular_buffer rx_buf;
+  struct circular_buffer tx_buf;
+
+  int timer;
+  int timer_started;
 
   int session;
   int fg_pgrp;
@@ -99,7 +110,7 @@ static int last_fd = 0;
 
 static struct client clients[64];
 
-int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned short mode) {
+static int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned short mode) {
 
   clients[fd].pid = pid;
   clients[fd].minor = minor;
@@ -109,7 +120,7 @@ int add_client(int fd, pid_t pid, unsigned short minor, int flags, unsigned shor
   return fd;
 }
 
-void init_ctrl(struct termios * ctrl) {
+static void init_ctrl(struct termios * ctrl) {
 
   ctrl->c_iflag = ICRNL;
   ctrl->c_oflag = ONLCR;
@@ -140,14 +151,107 @@ void init_ctrl(struct termios * ctrl) {
   ctrl->__c_ospeed = B9600;
 }
 
+static void init_circular_buffer(struct circular_buffer * buf) {
+
+  buf->start = 0;
+  buf->end = 0;
+}
+
+static int count_circular_buffer_index(struct circular_buffer * buf, int index) {
+
+  if (index >= buf->start)
+    return index - buf->start;
+  else
+    return TTY_BUF_SIZE - buf->start + index;
+}
+
+static int count_circular_buffer(struct circular_buffer * buf) {
+
+  return count_circular_buffer_index(buf, buf->end);
+}
+
+static int find_eol_circular_buffer(struct circular_buffer * buf, int * index) {
+
+  for (int i = buf->start; i != buf->end; i = (i+1)%TTY_BUF_SIZE) {
+
+    if ( (buf->buf[i] == '\r') || (buf->buf[i] == '\n') ) {
+
+      *index = i;
+      return 1;
+    }
+  }
+  
+  return 0;
+}
+
+static int enqueue_circular_buffer(struct circular_buffer * buf, char c) {
+
+  if (count_circular_buffer(buf) < (TTY_BUF_SIZE-1)) {
+
+    buf->buf[buf->end] = c;
+
+    buf->end = (buf->end+1) % TTY_BUF_SIZE;
+
+    return 1;
+  }
+      
+  return 0;
+}
+
+static int dequeue_circular_buffer(struct circular_buffer * buf, char * c) {
+
+  if (count_circular_buffer(buf) > 0) {
+
+    *c = buf->buf[buf->start];
+
+    buf->start = (buf->start+1) % TTY_BUF_SIZE;
+
+    return 1;
+  }
+  
+  return 0;
+}
+
+static int read_circular_buffer(struct circular_buffer * buf, int len, char * dest) {
+
+  if (len == 0)
+    return 0;
+
+  if (count_circular_buffer(buf) < len)
+    len = count_circular_buffer(buf);
+  
+  int end_index = (buf->start+len) % TTY_BUF_SIZE;
+
+  if (end_index > buf->start) {
+
+    memcpy(dest, &(buf->buf[buf->start]), len);
+  }
+  else {
+
+    memcpy(dest, &(buf->buf[buf->start]), TTY_BUF_SIZE - buf->start);
+
+    if ((len - (TTY_BUF_SIZE - buf->start)) > 0)
+      memcpy(dest+(TTY_BUF_SIZE - buf->start), &(buf->buf[0]), len - (TTY_BUF_SIZE - buf->start));
+  }
+
+  buf->start = end_index;
+    
+  return 0;
+}
+
 int register_device(unsigned short minor, struct device_ops * dev_ops) {
 
   devices[minor].ops = dev_ops;
 
   init_ctrl(&devices[minor].ctrl);
 
-  devices[minor].start = 0;
-  devices[minor].end = 0;
+  init_circular_buffer(&devices[minor].rx_buf);
+  init_circular_buffer(&devices[minor].tx_buf);
+
+  devices[minor].timer = timerfd_create(CLOCK_MONOTONIC, 0);
+  devices[minor].timer_started = 0;
+  
+  emscripten_log(EM_LOG_CONSOLE, "tty: timerfd=%d", devices[minor].timer);
 
   devices[minor].session = -1;
   devices[minor].fg_pgrp = -1;
@@ -187,7 +291,9 @@ EM_JS(int, probe_terminal, (), {
 
 EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
 
-    let msg = {
+    console.log("tty: write "+len);
+    
+    /*let msg = {
 
        from: "/var/tty.peer",
        write: 1,
@@ -197,12 +303,12 @@ EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
 
     let bc = Module.get_broadcast_channel("/dev/tty1");
     
-    bc.postMessage(msg);
+    bc.postMessage(msg);*/
 
     return len;
   });
 
-static int add_char(struct device_desc * dev, unsigned char c) {
+  /*static int add_char(struct device_desc * dev, unsigned char c) {
 
   int end2 = (dev->end+1)%TTY_BUF_SIZE;
 
@@ -248,6 +354,28 @@ static void extract_chars(struct device_desc * dev, size_t len, unsigned char * 
   }
 
   dev->start = i;
+  }*/
+
+static void local_tty_start_timer(int fd) {
+
+   struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
+
+   if (!dev->timer_started) {
+
+     dev->timer_started = 1;
+
+     struct itimerspec ts;
+
+     int msec = 5;
+     int msec2 = 10;
+
+     ts.it_value.tv_sec = msec / 1000;
+     ts.it_value.tv_nsec = (msec % 1000) * 1000000;
+     ts.it_interval.tv_sec = msec2 / 1000;
+     ts.it_interval.tv_nsec = (msec2 % 1000) * 1000000;
+
+     timerfd_settime(dev->timer, 0, &ts, NULL);
+   }
 }
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
@@ -272,72 +400,82 @@ static ssize_t local_tty_read(int fd, void * buf, size_t len) {
   if (dev->ctrl.c_lflag & ICANON) {
 
     // Search EOL
+    int i;
 
-    for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
+    if (find_eol_circular_buffer(&dev->rx_buf, &i) > 0) {
+
+      len2 = count_circular_buffer_index(&dev->rx_buf, i)+1;
+    }
+
+    /*for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
 
       if ( (dev->buf[i] == '\n') || (dev->buf[i] == '\r') ) {
 
 	len2 = (i >= dev->start)?i-dev->start+1:TTY_BUF_SIZE-dev->start+i+1;
 	break;
       }
-    }
+      }*/
       
   }
   else {
 
-    len2 = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
+    len2 = count_circular_buffer(&dev->rx_buf);
+
+    //len2 = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
   }
 
   if (len2 > 0) {
       
     size_t sent_len = (len2 <= len)?len2:len;
 
-    extract_chars(dev, sent_len, buf);
-
+    //extract_chars(dev, sent_len, buf);
+    read_circular_buffer(&dev->rx_buf, sent_len, buf);
+    
     return sent_len;
   }
     
   return 0;
 }
 
+static void tty_write_char(struct device_desc * dev, char c) {
+
+  if ( (c == '\n') && (dev->ctrl.c_oflag & ONLCR) ) {
+
+    enqueue_circular_buffer(&dev->tx_buf, '\r');
+  }
+  else if ( (c == '\r') && (dev->ctrl.c_oflag & OCRNL) ) {
+
+    enqueue_circular_buffer(&dev->tx_buf, '\n');
+    return;
+  }
+  else if ( (c == '\r') && (dev->ctrl.c_oflag & ONLRET) ) {
+
+    return;
+  }
+  
+  enqueue_circular_buffer(&dev->tx_buf, c);
+}
+
 static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
-  unsigned char tmp_buf[4096];
-  struct termios * ctrl = (fd == -1)?&(get_device(1)->ctrl):&(get_device_from_fd(fd)->ctrl);
+  //unsigned char tmp_buf[4096];
+
+  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
 
   unsigned char * data = (unsigned char *)buf;
 
-  //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: count=%d %d", count, ctrl->c_oflag);
-
-  int j = 0;
+  emscripten_log(EM_LOG_CONSOLE, "local_tty_write: count=%d", count);
 
   for (int i = 0; i < count; ++i) {
 
-    //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: i=%d c=%d", i, ((unsigned char *)buf)[i]);
-
-    if ( (data[i] == '\n') && (ctrl->c_oflag & ONLCR) ) {
-
-      tmp_buf[j] = '\r';
-      ++j;
-      }
-    else if ( (data[i] == '\r') && (ctrl->c_oflag & OCRNL) ) {
-
-      tmp_buf[j] = '\n';
-      ++j;
-      continue;
-      }
-    else if ( (data[i] == '\r') && (ctrl->c_oflag & ONLRET) ) {
-
-      continue;
-      }
-    
-    tmp_buf[j] = data[i];
-    ++j;
+    tty_write_char(dev, data[i]);
   }
 
-  //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: j=%d", j);
+  emscripten_log(EM_LOG_CONSOLE, "local_tty_write: tx_buf count=%d", count_circular_buffer(&dev->tx_buf));
 
-  write_terminal(tmp_buf, j);
+  //write_terminal(tmp_buf, j);
+  
+  local_tty_start_timer(fd);
   
   return count;
 }
@@ -429,6 +567,8 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 
   unsigned char echo_buf[1024];
 
+  emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: count=%d %d", count, count_circular_buffer(&dev->rx_buf));
+
   int j = 0;
 
   for (int i = 0; i < count; ++i) {
@@ -463,20 +603,37 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 	
 	// erase previous char (if any)
 
-	if (del_char(dev) >= 0) {
+	char c;
 
-	  echo_buf[k++] = 27;
+	//if (del_char(dev) >= 0) {
+	if (dequeue_circular_buffer(&dev->rx_buf, &c) > 0) {
+
+	  if ( (c == '\r') || (c == '\n') ) {
+
+	    enqueue_circular_buffer(&dev->rx_buf, c); // undo
+	  }
+	  else {
+
+	    enqueue_circular_buffer(&dev->tx_buf, 27);
+	    enqueue_circular_buffer(&dev->tx_buf, '[');
+	    enqueue_circular_buffer(&dev->tx_buf, 'D');
+	    enqueue_circular_buffer(&dev->tx_buf, 27);
+	    enqueue_circular_buffer(&dev->tx_buf, '[');
+	    enqueue_circular_buffer(&dev->tx_buf, 'K');
+	  }
+	    
+	  /*echo_buf[k++] = 27;
 	  echo_buf[k++] = '[';
 	  echo_buf[k++] = 'D';
 	  echo_buf[k++] = 27;
 	  echo_buf[k++] = '[';
-	  echo_buf[k++] = 'K';
+	  echo_buf[k++] = 'K';*/
 	}
       }
       else {
 
 	// enqueue
-	add_char(dev, data[i]);
+	enqueue_circular_buffer(&dev->rx_buf, data[i]);
       }
     
     }
@@ -491,7 +648,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       else {
 
 	// enqueue
-	add_char(dev, data[i]);
+	enqueue_circular_buffer(&dev->rx_buf, data[i]);
       }
     
     }
@@ -506,52 +663,66 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       else {
 
 	// enqueue
-	add_char(dev, data[i]);
+	enqueue_circular_buffer(&dev->rx_buf, data[i]);
       }
     
     }
     else {
 
-      add_char(dev, data[i]);
+      enqueue_circular_buffer(&dev->rx_buf, data[i]);
 
       if (dev->ctrl.c_lflag & ECHO) {
 
-	echo_buf[k] = data[i];
-	++k;
+	//echo_buf[k] = data[i];
+	//++k;
+	tty_write_char(dev, data[i]);
       }
     }
   }
 
   // Echo
-  if (k > 0) {
+  /*if (k > 0) {
     
     local_tty_write(fd, echo_buf, k);
-  }
+    }*/
+
+  emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: j=%d %d", j, count_circular_buffer(&dev->rx_buf));
 
   if (j > 0) { // data has been enqueued
 
     if ( (dev->read_pending.fd >= 0) && (dev->read_pending.len > 0) ) { // Pending read
+
+      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read %d", dev->read_pending.len);
 
       size_t len = 0;
 
       if (dev->ctrl.c_lflag & ICANON) {
 
 	// Search EOL
+	 int i;
 
-	for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
+	 if (find_eol_circular_buffer(&dev->rx_buf, &i) > 0) {
 
-	  if ( (dev->buf[i] == '\n') || (dev->buf[i] == '\r') ) {
+	   len = count_circular_buffer_index(&dev->rx_buf, i)+1;
+	 }
 
-	    len = (i >= dev->start)?i-dev->start+1:TTY_BUF_SIZE-dev->start+i+1;
+	 /*for (int i = dev->rx_buf.start; i != dev->rx_buf.end; i = (i+1)%TTY_BUF_SIZE) {
+
+	  if ( (dev->rx_buf.buf[i] == '\n') || (dev->rx_buf.buf[i] == '\r') ) {
+
+	    len = (i >= dev->rx_buf.start)?i-dev->rx_buf.start+1:TTY_BUF_SIZE-dev->rx_buf.start+i+1;
 	    break;
 	  }
-	}
+	  }*/
       
       }
       else {
 
-	len = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
+	//len = (dev->rx_buf.end >= dev->rx_buf.start)?dev->rx_buf.end-dev->rx_buf.start+1:TTY_BUF_SIZE-dev->rx_buf.start+dev->rx_buf.end+1;
+	len = count_circular_buffer(&dev->rx_buf);
       }
+
+      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read len=%d", len);
 
       if (len > 0) {
 
@@ -565,22 +736,29 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 	reply_msg->_u.io_msg.len = sent_len;
 
 	//emscripten_log(EM_LOG_CONSOLE, "(2) dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
+
+	read_circular_buffer(&dev->rx_buf, sent_len, (char *)reply_msg->_u.io_msg.buf);
 	
-	extract_chars(dev, sent_len, reply_msg->_u.io_msg.buf);
+	//extract_chars(dev, sent_len, reply_msg->_u.io_msg.buf);
 
 	return sent_len;
       }
     }
     else if (dev->read_select_pending.fd >= 0) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "read_select_pending.fd >= 0");
+      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read select");
 
-      reply_msg->msg_id = SELECT|0x80;
-      reply_msg->pid = dev->read_select_pending.pid;
-      reply_msg->_errno = 0;
-      reply_msg->_u.select_msg.remote_fd = dev->read_select_pending.remote_fd;
-      reply_msg->_u.select_msg.fd = dev->read_select_pending.fd;
-      reply_msg->_u.select_msg.read_write = 0; // read
+      int i;
+
+      if ( !(dev->ctrl.c_lflag & ICANON) || (find_eol_circular_buffer(&dev->rx_buf, &i) > 0) ) {
+
+	reply_msg->msg_id = SELECT|0x80;
+	reply_msg->pid = dev->read_select_pending.pid;
+	reply_msg->_errno = 0;
+	reply_msg->_u.select_msg.remote_fd = dev->read_select_pending.remote_fd;
+	reply_msg->_u.select_msg.fd = dev->read_select_pending.fd;
+	reply_msg->_u.select_msg.read_write = 0; // read
+      }
     }
   }
   
@@ -618,8 +796,8 @@ static int local_tty_select(pid_t pid, int remote_fd, int fd, int read_write, in
       return 1; // write is always possible
     }
     else { // read
-
-      if (dev->start != dev->end) { // input buffer contains char
+      
+      if (count_circular_buffer(&dev->rx_buf) > 0) { // input buffer contains char
 
 	return 1;
       }
@@ -699,7 +877,7 @@ int main() {
   strcpy((char *)&msg->_u.dev_msg.dev_name[0], "tty");
   
   sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
-
+  
   while (1) {
     
     bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
@@ -746,6 +924,8 @@ int main() {
 
       unsigned char reply_buf[1256];
       struct message * reply_msg = (struct message *)&reply_buf[0];
+
+      emscripten_log(EM_LOG_CONSOLE, "tty: READ_TTY");
       
       reply_msg->msg_id = 0;
 

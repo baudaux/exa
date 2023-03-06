@@ -52,6 +52,7 @@ enum message_id {
   LSTAT = 30,
   SELECT,
   SCTTY,
+  TIMERFD_CREATE,
   
 };
 
@@ -226,6 +227,12 @@ struct sctty_message {
   int arg;
 };
 
+struct timerfd_create_message {
+
+  int clockid;
+  int fd;
+};
+
 struct message {
 
   unsigned char msg_id; /* enum message_id on 7 bits, for answer the most significant bit is set to 1 */
@@ -260,6 +267,7 @@ struct message {
     struct fstat_message fstat_msg;
     struct select_message select_msg;
     struct sctty_message sctty_msg;
+    struct timerfd_create_message timerfd_create_msg;
     
   } _u;
 };
