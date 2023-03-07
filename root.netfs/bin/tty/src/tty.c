@@ -25,6 +25,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 
+#include <time.h>
 #include <sys/timerfd.h>
 
 #include "msg.h"
@@ -359,21 +360,20 @@ static void extract_chars(struct device_desc * dev, size_t len, unsigned char * 
 static void local_tty_start_timer(int fd) {
 
    struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
+   struct itimerspec ts;
 
    if (!dev->timer_started) {
 
      dev->timer_started = 1;
-
-     struct itimerspec ts;
-
-     int msec = 5;
-     int msec2 = 10;
-
-     ts.it_value.tv_sec = msec / 1000;
-     ts.it_value.tv_nsec = (msec % 1000) * 1000000;
-     ts.it_interval.tv_sec = msec2 / 1000;
-     ts.it_interval.tv_nsec = (msec2 % 1000) * 1000000;
-
+     
+     unsigned long long val_msec = 5;
+     unsigned long long int_msec = 1000;
+     
+     ts.it_interval.tv_sec = int_msec / 1000ull;
+     ts.it_interval.tv_nsec = (int_msec % 1000ull) * 1000000ull;
+     ts.it_value.tv_sec = val_msec / 1000ull;
+     ts.it_value.tv_nsec = (val_msec % 1000ull) * 1000000ull;
+     
      timerfd_settime(dev->timer, 0, &ts, NULL);
    }
 }
@@ -877,8 +877,22 @@ int main() {
   strcpy((char *)&msg->_u.dev_msg.dev_name[0], "tty");
   
   sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
-  
+
+  struct device_desc * dev1 = get_device(1);
+
   while (1) {
+
+    fd_set rfds;
+    int retval;
+
+    FD_ZERO(&rfds);
+    FD_SET(sock, &rfds);
+    FD_SET(dev1->timer, &rfds);
+    
+    retval = select(((sock > dev1->timer)?sock:dev1->timer)+1, &rfds, NULL, NULL, NULL);
+    
+    if (retval < 0)
+      continue;
     
     bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
 
