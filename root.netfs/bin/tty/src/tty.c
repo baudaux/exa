@@ -50,6 +50,7 @@ struct device_ops {
   int (*close)(int fd);
   ssize_t (*enqueue)(int fd, void * buf, size_t len, struct message * reply_msg);
   int (*select)(pid_t pid, int remote_fd, int fd, int read_write, int start_stop, struct sockaddr_un * sock_addr);
+  void (*flush)(int fd);
 };
 
 struct pending_request {
@@ -252,8 +253,6 @@ int register_device(unsigned short minor, struct device_ops * dev_ops) {
   devices[minor].timer = timerfd_create(CLOCK_MONOTONIC, 0);
   devices[minor].timer_started = 0;
   
-  emscripten_log(EM_LOG_CONSOLE, "tty: timerfd=%d", devices[minor].timer);
-
   devices[minor].session = -1;
   devices[minor].fg_pgrp = -1;
 
@@ -292,9 +291,7 @@ EM_JS(int, probe_terminal, (), {
 
 EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
 
-    console.log("tty: write "+len);
-    
-    /*let msg = {
+    let msg = {
 
        from: "/var/tty.peer",
        write: 1,
@@ -304,7 +301,7 @@ EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
 
     let bc = Module.get_broadcast_channel("/dev/tty1");
     
-    bc.postMessage(msg);*/
+    bc.postMessage(msg);
 
     return len;
   });
@@ -366,8 +363,8 @@ static void local_tty_start_timer(int fd) {
 
      dev->timer_started = 1;
      
-     unsigned long long val_msec = 5;
-     unsigned long long int_msec = 1000;
+     unsigned long long val_msec = 50;
+     unsigned long long int_msec = 50;
      
      ts.it_interval.tv_sec = int_msec / 1000ull;
      ts.it_interval.tv_nsec = (int_msec % 1000ull) * 1000000ull;
@@ -380,13 +377,13 @@ static void local_tty_start_timer(int fd) {
 
 static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
 
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
+  //emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
 
   ++last_fd;
 
   add_client(last_fd, pid, minor, flags, mode);
 
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: %d %d", get_device_from_fd(last_fd)->session, get_device_from_fd(last_fd)->fg_pgrp);
+  //emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d %d", get_device_from_fd(last_fd)->session, get_device_from_fd(last_fd)->fg_pgrp);
   
   return last_fd;
 }
@@ -464,14 +461,14 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
   unsigned char * data = (unsigned char *)buf;
 
-  emscripten_log(EM_LOG_CONSOLE, "local_tty_write: count=%d", count);
+  //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: count=%d", count);
 
   for (int i = 0; i < count; ++i) {
 
     tty_write_char(dev, data[i]);
   }
 
-  emscripten_log(EM_LOG_CONSOLE, "local_tty_write: tx_buf count=%d", count_circular_buffer(&dev->tx_buf));
+  //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: tx_buf count=%d", count_circular_buffer(&dev->tx_buf));
 
   //write_terminal(tmp_buf, j);
   
@@ -480,9 +477,41 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
   return count;
 }
 
+static void local_tty_flush(int fd) {
+
+  char buf[4096];
+  int count;
+
+  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
+  struct itimerspec ts;
+  
+  count = count_circular_buffer(&dev->tx_buf);
+
+  if (count > 0) {
+
+    read_circular_buffer(&dev->tx_buf, count, buf);
+    
+    write_terminal((unsigned char *)buf, count);
+  }
+  else {
+
+    dev->timer_started = 0;
+     
+    unsigned long long val_msec = 0;
+    unsigned long long int_msec = 0;
+     
+    ts.it_interval.tv_sec = int_msec / 1000ull;
+    ts.it_interval.tv_nsec = (int_msec % 1000ull) * 1000000ull;
+    ts.it_value.tv_sec = val_msec / 1000ull;
+    ts.it_value.tv_nsec = (val_msec % 1000ull) * 1000000ull;
+    
+    timerfd_settime(dev->timer, 0, &ts, NULL);
+  }
+}
+
 static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
   
-  emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
+  //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
   
   switch(op) {
 
@@ -529,7 +558,7 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TIOCSPGRP:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
 
     memcpy(&(get_device_from_fd(fd)->fg_pgrp), buf, sizeof(int));
 
@@ -537,13 +566,13 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
 
   case TIOCNOTTY:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCNOTTY");
 
     break;
 
   case TIOCSCTTY:
 
-    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY (%d %d)", get_device_from_fd(fd)->session, get_device_from_fd(fd)->fg_pgrp);
+    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY (%d %d)", get_device_from_fd(fd)->session, get_device_from_fd(fd)->fg_pgrp);
 
     break;
 
@@ -567,7 +596,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 
   unsigned char echo_buf[1024];
 
-  emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: count=%d %d", count, count_circular_buffer(&dev->rx_buf));
+  //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: count=%d %d", count, count_circular_buffer(&dev->rx_buf));
 
   int j = 0;
 
@@ -614,12 +643,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 	  }
 	  else {
 
-	    enqueue_circular_buffer(&dev->tx_buf, 27);
-	    enqueue_circular_buffer(&dev->tx_buf, '[');
-	    enqueue_circular_buffer(&dev->tx_buf, 'D');
-	    enqueue_circular_buffer(&dev->tx_buf, 27);
-	    enqueue_circular_buffer(&dev->tx_buf, '[');
-	    enqueue_circular_buffer(&dev->tx_buf, 'K');
+	    local_tty_write(fd, "\x1b[D\x1b[K", 6);
 	  }
 	    
 	  /*echo_buf[k++] = 27;
@@ -673,9 +697,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 
       if (dev->ctrl.c_lflag & ECHO) {
 
-	//echo_buf[k] = data[i];
-	//++k;
-	tty_write_char(dev, data[i]);
+	local_tty_write(fd, data+i, 1);
       }
     }
   }
@@ -686,13 +708,13 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
     local_tty_write(fd, echo_buf, k);
     }*/
 
-  emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: j=%d %d", j, count_circular_buffer(&dev->rx_buf));
+  //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: j=%d %d", j, count_circular_buffer(&dev->rx_buf));
 
   if (j > 0) { // data has been enqueued
 
     if ( (dev->read_pending.fd >= 0) && (dev->read_pending.len > 0) ) { // Pending read
 
-      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read %d", dev->read_pending.len);
+      //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read %d", dev->read_pending.len);
 
       size_t len = 0;
 
@@ -722,7 +744,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 	len = count_circular_buffer(&dev->rx_buf);
       }
 
-      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read len=%d", len);
+      //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read len=%d", len);
 
       if (len > 0) {
 
@@ -746,7 +768,7 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
     }
     else if (dev->read_select_pending.fd >= 0) {
 
-      emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read select");
+      //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: pending read select");
 
       int i;
 
@@ -824,6 +846,7 @@ static struct device_ops local_tty_ops = {
   .close = local_tty_close,
   .enqueue = local_tty_enqueue,
   .select = local_tty_select,
+  .flush = local_tty_flush,
 };
 
 static void add_read_pending_request(pid_t pid, int fd, size_t len, struct sockaddr_un * sock_addr) {
@@ -887,12 +910,25 @@ int main() {
 
     FD_ZERO(&rfds);
     FD_SET(sock, &rfds);
-    FD_SET(dev1->timer, &rfds);
+
+    if (dev1->timer > 0)
+      FD_SET(dev1->timer, &rfds);
     
     retval = select(((sock > dev1->timer)?sock:dev1->timer)+1, &rfds, NULL, NULL, NULL);
     
     if (retval < 0)
       continue;
+
+    if ( (dev1->timer > 0) && FD_ISSET(dev1->timer, &rfds) ) {
+
+      uint64_t count = -1;
+
+      read(dev1->timer, &count, sizeof(count));
+      
+      dev1->ops->flush(-1);
+     
+      continue;
+    }
     
     bytes_rec = recvfrom(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, &len);
 
@@ -914,11 +950,11 @@ int main() {
       emscripten_log(EM_LOG_CONSOLE, "PROBE_TTY successful: rows=%d cols=%d",msg->_u.probe_tty_msg.rows, msg->_u.probe_tty_msg.cols);
 
       minor += 1;
+      
+      register_device(minor, &local_tty_ops);
 
       get_device(1)->ws.ws_row = msg->_u.probe_tty_msg.rows;
       get_device(1)->ws.ws_col = msg->_u.probe_tty_msg.cols;
-	
-      register_device(minor, &local_tty_ops);
 
       local_tty_write(-1, TTY_VERSION, strlen(TTY_VERSION));
 
@@ -939,7 +975,7 @@ int main() {
       unsigned char reply_buf[1256];
       struct message * reply_msg = (struct message *)&reply_buf[0];
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: READ_TTY");
+      //emscripten_log(EM_LOG_CONSOLE, "tty: READ_TTY");
       
       reply_msg->msg_id = 0;
 
@@ -988,7 +1024,7 @@ int main() {
 
 	if (get_device_from_fd(remote_fd)->session < 0) {
 
-	  emscripten_log(EM_LOG_CONSOLE, "!!!! tty: set controlling tty of session %d", msg->_u.open_msg.sid);
+	  //emscripten_log(EM_LOG_CONSOLE, "!!!! tty: set controlling tty of session %d", msg->_u.open_msg.sid);
 
 	  // tty is not yet controlled so it is now controlling the sid session
 	  get_device_from_fd(msg->_u.io_msg.fd)->session = msg->_u.open_msg.sid;
@@ -1039,7 +1075,7 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
 
       msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len);
 
@@ -1069,7 +1105,7 @@ int main() {
     }
     else if (msg->msg_id == (SCTTY|0x80)) {
 
-      emscripten_log(EM_LOG_CONSOLE, "tty: response from SCTTY from %d", msg->pid);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: response from SCTTY from %d", msg->pid);
     }
     else if (msg->msg_id == FCNTL) {
 
@@ -1126,7 +1162,7 @@ int main() {
     }
     else if (msg->msg_id == LSTAT) {
       
-      emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
+      //emscripten_log(EM_LOG_CONSOLE, "tty: LSTAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
 
       char * tty = strrchr(msg->_u.stat_msg.pathname_or_buf, '/')+1;
 
