@@ -513,10 +513,14 @@ int main() {
 
       emscripten_log(EM_LOG_CONSOLE, "GETSID from %d", msg->pid);
 
-      if (msg->_u.getsid_msg.pid == 0)
+      if (msg->_u.getsid_msg.pid == 0) {
 	msg->_u.getsid_msg.sid = process_getsid(msg->pid);
-      else
+	msg->_u.getsid_msg.pgid = process_getpgid(msg->pid);
+      }
+      else {
 	msg->_u.getsid_msg.sid = process_getsid(msg->_u.getsid_msg.pid);
+	msg->_u.getsid_msg.pgid = process_getpgid(msg->_u.getsid_msg.pid);
+      }
 
       //dump_processes();
       

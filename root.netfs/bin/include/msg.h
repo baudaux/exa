@@ -137,6 +137,7 @@ struct getsid_message {
 
   pid_t pid;
   pid_t sid;
+  pid_t pgid;
 };
 
 struct setsid_message {

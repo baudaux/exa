@@ -102,7 +102,7 @@ EM_JS(int, do_fetch_head, (const char * pathname), {
 	    wakeUp(contentLength);
 	  }
 	  else
-	    wakeUp(-1);
+	    wakeUp(-2); // NOENT
     });
   });
 });
@@ -150,7 +150,7 @@ EM_JS(int, do_fetch, (const char * pathname, unsigned int offset, void * buf, un
 	    
 	  }
 	  else
-	    wakeUp(-1);
+	    wakeUp(-2); // NOENT
     });
   });
 });
@@ -172,7 +172,7 @@ static int netfs_open(const char * pathname, int flags, mode_t mode, pid_t pid, 
     return last_fd;
   }
 
-  return -1;
+  return size;
 }
 
 static ssize_t netfs_read(int fd, void * buf, size_t count) {

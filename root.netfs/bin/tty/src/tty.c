@@ -46,7 +46,7 @@ struct device_ops {
   int (*open)(const char * pathname, int flags, mode_t mode, unsigned short minor, pid_t pid, pid_t sid);
   ssize_t (*read)(int fd, void * buf, size_t len);
   ssize_t (*write)(int fd, const void * buf, size_t len);
-  int (*ioctl)(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid);
+  int (*ioctl)(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid, pid_t pgrp);
   int (*close)(int fd);
   ssize_t (*enqueue)(int fd, void * buf, size_t len, struct message * reply_msg);
   int (*select)(pid_t pid, int remote_fd, int fd, int read_write, int start_stop, struct sockaddr_un * sock_addr);
@@ -499,7 +499,7 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
   return count;
 }
 
-static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid) {
+static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid, pid_t pgid) {
   
   //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
   
@@ -537,9 +537,9 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_
 
   case TIOCGPGRP:
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCGPGRP");
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCGPGRP %d", get_device_from_fd(fd)->fg_pgrp);
 
-    if (get_device_from_fd(fd)->fg_pgrp < 0)
+    if (get_device_from_fd(fd)->fg_pgrp == 0)
       return -1;
 
     memcpy(buf, &(get_device_from_fd(fd)->fg_pgrp), sizeof(int));
@@ -548,7 +548,7 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_
 
   case TIOCSPGRP:
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP");
+    emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSPGRP %d", *((int *)buf));
 
     memcpy(&(get_device_from_fd(fd)->fg_pgrp), buf, sizeof(int));
 
@@ -571,10 +571,12 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_
       if ( (pid == sid) && (get_device_from_fd(fd)->session == 0) && (!arg) ) {
 
 	get_device_from_fd(fd)->session = sid;
+	get_device_from_fd(fd)->fg_pgrp = pgid;
       }
       else if (arg) {
 
 	get_device_from_fd(fd)->session = sid;
+	get_device_from_fd(fd)->fg_pgrp = pgid;
       }
     }
     
@@ -1093,7 +1095,7 @@ int main() {
       }
       else {
 
-	msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len, msg->pid, 0);
+	msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len, msg->pid, 0, 0);
       
 	msg->msg_id |= 0x80;
 	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
@@ -1105,7 +1107,7 @@ int main() {
 
       struct message * ioctl_msg = (struct message *)&ioctl_buf[0];
 
-      ioctl_msg->_errno = get_device_from_fd(ioctl_msg->_u.ioctl_msg.fd)->ops->ioctl(ioctl_msg->_u.ioctl_msg.fd, ioctl_msg->_u.ioctl_msg.op, ioctl_msg->_u.ioctl_msg.buf, ioctl_msg->_u.ioctl_msg.len, msg->pid, msg->_u.getsid_msg.sid);
+      ioctl_msg->_errno = get_device_from_fd(ioctl_msg->_u.ioctl_msg.fd)->ops->ioctl(ioctl_msg->_u.ioctl_msg.fd, ioctl_msg->_u.ioctl_msg.op, ioctl_msg->_u.ioctl_msg.buf, ioctl_msg->_u.ioctl_msg.len, msg->pid, msg->_u.getsid_msg.sid, msg->_u.getsid_msg.pgid);
       
       ioctl_msg->msg_id |= 0x80;
       sendto(sock, ioctl_buf, 256, 0, (struct sockaddr *) &ioctl_addr, sizeof(ioctl_addr));
