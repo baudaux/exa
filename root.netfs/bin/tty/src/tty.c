@@ -172,6 +172,36 @@ static int count_circular_buffer(struct circular_buffer * buf) {
   return count_circular_buffer_index(buf, buf->end);
 }
 
+static int get_circular_buffer_head(struct circular_buffer * buf, char ** ptr) {
+
+  if (count_circular_buffer(buf) > 0) {
+
+    *ptr = (char *)&(buf->buf[buf->start]);
+
+    if (buf->end >= buf->start)
+      return buf->end-buf->start;
+
+    return TTY_BUF_SIZE - buf->start;
+  }
+
+  return 0;
+}
+
+static int get_circular_buffer_tail(struct circular_buffer * buf, char ** ptr) {
+
+  if (buf->end >= buf->start)
+    return 0;
+
+  *ptr = (char *)&(buf->buf[0]);
+
+  return buf->end;
+}
+
+static void empty_circular_buffer(struct circular_buffer * buf) {
+
+  buf->start = buf->end;
+}
+
 static int find_eol_circular_buffer(struct circular_buffer * buf, int * index) {
 
   for (int i = buf->start; i != buf->end; i = (i+1)%TTY_BUF_SIZE) {
@@ -303,7 +333,7 @@ EM_JS(int, probe_terminal, (), {
     bc.postMessage(msg);
   });
 
-EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
+EM_JS(int, write_terminal, (char * buf, unsigned long len), {
 
     let msg = {
 
@@ -387,7 +417,50 @@ static ssize_t local_tty_read(int fd, void * buf, size_t len) {
   return 0;
 }
 
-static void tty_write_char(struct device_desc * dev, char c) {
+static void local_tty_flush(int fd) {
+
+  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
+  struct itimerspec ts;
+
+  char * ptr;
+  
+  int count = get_circular_buffer_head(&dev->tx_buf, &ptr);
+
+  if (count > 0) {
+    
+    write_terminal(ptr, count);
+
+    count = get_circular_buffer_tail(&dev->tx_buf, &ptr);
+
+    if (count > 0) {
+
+      write_terminal(ptr, count);
+    }
+
+    empty_circular_buffer(&dev->tx_buf);
+  }
+  else {
+
+    dev->timer_started = 0;
+     
+    unsigned long long val_msec = 0;
+    unsigned long long int_msec = 0;
+     
+    ts.it_interval.tv_sec = int_msec / 1000ull;
+    ts.it_interval.tv_nsec = (int_msec % 1000ull) * 1000000ull;
+    ts.it_value.tv_sec = val_msec / 1000ull;
+    ts.it_value.tv_nsec = (val_msec % 1000ull) * 1000000ull;
+    
+    timerfd_settime(dev->timer, 0, &ts, NULL);
+  }
+}
+
+static void tty_write_char(int fd, struct device_desc * dev, char c) {
+
+  if (count_circular_buffer(&dev->tx_buf) > (TTY_BUF_SIZE-5)) {
+    
+    local_tty_flush(fd);
+  }
 
   if ( (c == '\n') && (dev->ctrl.c_oflag & ONLCR) ) {
 
@@ -416,7 +489,7 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
   for (int i = 0; i < count; ++i) {
 
-    tty_write_char(dev, data[i]);
+    tty_write_char(fd, dev, data[i]);
   }
 
   //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: tx_buf count=%d", count_circular_buffer(&dev->tx_buf));
@@ -424,38 +497,6 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
   local_tty_start_timer(fd);
   
   return count;
-}
-
-static void local_tty_flush(int fd) {
-
-  char buf[4096];
-  int count;
-
-  struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
-  struct itimerspec ts;
-  
-  count = count_circular_buffer(&dev->tx_buf);
-
-  if (count > 0) {
-
-    read_circular_buffer(&dev->tx_buf, count, buf);
-    
-    write_terminal((unsigned char *)buf, count);
-  }
-  else {
-
-    dev->timer_started = 0;
-     
-    unsigned long long val_msec = 0;
-    unsigned long long int_msec = 0;
-     
-    ts.it_interval.tv_sec = int_msec / 1000ull;
-    ts.it_interval.tv_nsec = (int_msec % 1000ull) * 1000000ull;
-    ts.it_value.tv_sec = val_msec / 1000ull;
-    ts.it_value.tv_nsec = (val_msec % 1000ull) * 1000000ull;
-    
-    timerfd_settime(dev->timer, 0, &ts, NULL);
-  }
 }
 
 static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid) {
