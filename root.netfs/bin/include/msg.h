@@ -204,6 +204,9 @@ struct stat_message {
   
   int len;
   char pathname_or_buf[1024];
+  unsigned char type;
+  unsigned short major;
+  unsigned short minor;
 };
 
 struct fstat_message {

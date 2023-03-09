@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/sysmacros.h>
 
 #include "msg.h"
 
@@ -40,6 +41,7 @@ struct device_ops {
   ssize_t (*write)(int fildes, const void *buf, size_t nbyte);
   int (*ioctl)(int fildes, int request, ... /* arg */);
   int (*close)(int fd);
+  int (*stat)(const char *pathname, pid_t pid, unsigned short minor);
 };
 
 struct fd_entry {
@@ -210,10 +212,22 @@ static int netfs_ioctl(int fildes, int request, ... /* arg */) {
 }
 
 static int netfs_close(int fd) {
-
   
-
   return 0;
+}
+
+static int netfs_stat(const char * pathname, pid_t pid, unsigned short minor) {
+
+  emscripten_log(EM_LOG_CONSOLE,"netfs_stat: %s", pathname);
+
+  int size = do_fetch_head(pathname);
+  
+  if (size >= 0) {
+  
+    return 0;
+  }
+
+  return size;
 }
 
 static struct device_ops netfs_ops = {
@@ -223,6 +237,7 @@ static struct device_ops netfs_ops = {
   .write = netfs_write,
   .ioctl = netfs_ioctl,
   .close = netfs_close,
+  .stat = netfs_stat,
 };
 
 int register_device(unsigned short minor, struct device_ops * dev_ops) {
@@ -415,9 +430,33 @@ int main() {
       msg->msg_id |= 0x80;
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
-  }
+    else if (msg->msg_id == STAT) {
+      
+      emscripten_log(EM_LOG_CONSOLE, "netfs: STAT from %d: %s", msg->pid, msg->_u.stat_msg.pathname_or_buf);
 
-  
+      if (get_device(msg->_u.stat_msg.minor)->stat((const char *)(msg->_u.stat_msg.pathname_or_buf), msg->pid, msg->_u.stat_msg.minor) == 0) {
+
+	struct stat stat_buf;
+
+	stat_buf.st_dev = makedev(msg->_u.stat_msg.major, msg->_u.stat_msg.minor);
+	stat_buf.st_ino = 1;
+
+	//emscripten_log(EM_LOG_CONSOLE, "tty: STAT -> %d %lld", stat_buf.st_dev, stat_buf.st_ino);
+
+	msg->_u.stat_msg.len = sizeof(struct stat);
+	memcpy(msg->_u.stat_msg.pathname_or_buf, &stat_buf, sizeof(struct stat));
+
+	msg->_errno = 0;
+      }
+      else {
+
+	msg->_errno = -1;
+      }
+
+      msg->msg_id |= 0x80;
+      sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+    }
+  }
   
   return 0;
 }

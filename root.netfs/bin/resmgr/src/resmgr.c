@@ -711,6 +711,10 @@ int main() {
 	  driver_addr.sun_family = AF_UNIX;
 	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
+	  msg->_u.stat_msg.type = vnode->_u.dev.type;
+	  msg->_u.stat_msg.major = vnode->_u.dev.major;
+	  msg->_u.stat_msg.minor = vnode->_u.dev.minor;
+
 	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
 
 	}

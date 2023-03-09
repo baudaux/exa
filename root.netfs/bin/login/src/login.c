@@ -457,7 +457,7 @@ static void open_tty(const char *tty)
 {
 	int i, fd, flags;
 
-	emscripten_log(EM_LOG_CONSOLE,"open_tty: %s", tty);
+	//emscripten_log(EM_LOG_CONSOLE,"open_tty: %s", tty);
 
 	fd = open(tty, O_RDWR | O_NONBLOCK);
 	if (fd == -1) {
@@ -533,7 +533,7 @@ static void chown_tty(struct login_context *cxt)
  */
 static void init_tty(struct login_context *cxt)
 {
-  emscripten_log(EM_LOG_CONSOLE,"--> init_tty");
+  //emscripten_log(EM_LOG_CONSOLE,"--> init_tty");
   
 	struct stat st;
 	struct termios tt, ttt;
@@ -543,7 +543,7 @@ static void init_tty(struct login_context *cxt)
 
 	get_terminal_name(&cxt->tty_path, &cxt->tty_name, &cxt->tty_number);
 
-	emscripten_log(EM_LOG_CONSOLE,"get_terminal_name: %s %s %s", cxt->tty_path, cxt->tty_name, cxt->tty_number);
+	//emscripten_log(EM_LOG_CONSOLE,"get_terminal_name: %s %s %s", cxt->tty_path, cxt->tty_name, cxt->tty_number);
 
 	/*
 	 * In case login is suid it was possible to use a hardlink as stdin
@@ -562,7 +562,7 @@ static void init_tty(struct login_context *cxt)
 		sleepexit(EXIT_FAILURE);
 	}
 
-	emscripten_log(EM_LOG_CONSOLE,"good tty");
+	//emscripten_log(EM_LOG_CONSOLE,"good tty");
 
 #ifdef LOGIN_CHOWN_VCS
 	if (cxt->tty_number) {
@@ -578,7 +578,7 @@ static void init_tty(struct login_context *cxt)
 	if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) < 0)
 		syslog(LOG_WARNING, _("TIOCGWINSZ ioctl failed: %m"));
 
-	emscripten_log(EM_LOG_CONSOLE,"tty ws: %d %d", ws.ws_row, ws.ws_col);
+	//emscripten_log(EM_LOG_CONSOLE,"tty ws: %d %d", ws.ws_row, ws.ws_col);
 
 	tcgetattr(0, &tt);
 	ttt = tt;
@@ -622,7 +622,7 @@ static void init_tty(struct login_context *cxt)
 	    && ioctl(STDIN_FILENO, TIOCSWINSZ, &ws) < 0)
 		syslog(LOG_WARNING, _("TIOCSWINSZ ioctl failed: %m"));
 
-	emscripten_log(EM_LOG_CONSOLE,"<-- init_tty");
+	//emscripten_log(EM_LOG_CONSOLE,"<-- init_tty");
 }
 
 /*
@@ -1234,7 +1234,7 @@ static void init_environ(struct login_context *cxt)
 	char tmp[PATH_MAX];
 	int len, i;
 
-	emscripten_log(EM_LOG_CONSOLE,"--> init_environ");
+	//emscripten_log(EM_LOG_CONSOLE,"--> init_environ");
 
 	termenv = getenv("TERM");
 	if (termenv)
@@ -1275,7 +1275,7 @@ static void init_environ(struct login_context *cxt)
 		putenv(env[i]);
 	#endif
 
-	emscripten_log(EM_LOG_CONSOLE,"<-- init_environ");
+	//emscripten_log(EM_LOG_CONSOLE,"<-- init_environ");
 
 	
 }
@@ -1363,7 +1363,7 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 		{NULL, 0, NULL, 0}
 	};
 
-	emscripten_log(EM_LOG_CONSOLE,"--> initialize");
+	//emscripten_log(EM_LOG_CONSOLE,"--> initialize");
 
 	timeout = (unsigned int)getlogindefs_num("LOGIN_TIMEOUT", LOGIN_TIMEOUT);
 
@@ -1420,7 +1420,7 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 	if (*argv) {
 		char *p = *argv;
 
-		emscripten_log(EM_LOG_CONSOLE,"initialize: cmd_username=%s", p);
+		//emscripten_log(EM_LOG_CONSOLE,"initialize: cmd_username=%s", p);
 
 		/* username from command line */
 		cxt->cmd_username = xstrdup(p);
@@ -1443,7 +1443,7 @@ static void initialize(int argc, char **argv, struct login_context *cxt)
 		ul_close_all_fds(STDERR_FILENO + 1, ~0U);
 	#endif
 
-	emscripten_log(EM_LOG_CONSOLE,"<-- initialize");
+	//emscripten_log(EM_LOG_CONSOLE,"<-- initialize");
 }
 
 int main(int argc, char **argv)
@@ -1467,7 +1467,7 @@ int main(int argc, char **argv)
 	bindtextdomain(PACKAGE, LOCALEDIR);
 	textdomain(PACKAGE);
 
-	emscripten_log(EM_LOG_CONSOLE,"--> login::main");
+	//emscripten_log(EM_LOG_CONSOLE,"--> login::main");
 	
 	initialize(argc, argv, &cxt);
 
