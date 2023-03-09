@@ -1219,9 +1219,8 @@ static void fork_session(struct login_context *cxt)
 	 * TIOCSCTTY: steal tty from other process group.
 	 */
 
-	/* BB: TODO */
-	/*if (ioctl(0, TIOCSCTTY, 1))
-	  syslog(LOG_ERR, _("TIOCSCTTY failed: %m"));*/
+	if (ioctl(0, TIOCSCTTY, 1))
+	  syslog(LOG_ERR, _("TIOCSCTTY failed: %m"));
 	signal(SIGINT, SIG_DFL);
 }
 

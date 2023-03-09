@@ -194,14 +194,12 @@ pid_t process_fork(pid_t pid, pid_t ppid, const char * name, const char * cwd) {
 
     processes[pid].pgid =  processes[ppid].pgid;
     processes[pid].sid =  processes[ppid].sid;
-    processes[pid].term =  processes[ppid].term;
     
   }
   else {
 
     processes[pid].pgid = 0;
     processes[pid].sid = 0;
-    processes[pid].term =  NULL;
   }
 
   if (name)
@@ -395,7 +393,6 @@ pid_t process_setsid(pid_t pid) {
      
     processes[pid].pgid = pid;
     processes[pid].sid = pid;
-    processes[pid].term = NULL;
 
     // TODO inform tty driver
     
@@ -439,23 +436,6 @@ int process_setpgid(pid_t pid, pid_t pgid) {
   processes[pid].pgid = pgid;
 
   return 0;
-}
-
-int process_set_ctty(pid_t pid, struct vnode * tty) {
-
-  if (processes[pid].term)
-    return 0;
-
-  emscripten_log(EM_LOG_CONSOLE,"process_set_ctty: %d %x", pid, tty);
-  
-  processes[pid].term = tty;
-
-  return 1;
-}
-
-struct vnode * process_get_ctty(pid_t pid) {
-
-  return processes[pid].term;
 }
 
 int process_dup(pid_t pid, int fd, int new_fd) {

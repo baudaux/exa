@@ -220,13 +220,6 @@ struct select_message {
   int remote_fd;
 };
 
-struct sctty_message {
-
-  int minor;
-  int tty_session;
-  int arg;
-};
-
 struct timerfd_create_message {
 
   int clockid;
@@ -266,7 +259,6 @@ struct message {
     struct stat_message stat_msg;
     struct fstat_message fstat_msg;
     struct select_message select_msg;
-    struct sctty_message sctty_msg;
     struct timerfd_create_message timerfd_create_msg;
     
   } _u;

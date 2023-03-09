@@ -43,10 +43,10 @@
 
 struct device_ops {
 
-  int (*open)(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor);
+  int (*open)(const char * pathname, int flags, mode_t mode, unsigned short minor, pid_t pid, pid_t sid);
   ssize_t (*read)(int fd, void * buf, size_t len);
   ssize_t (*write)(int fd, const void * buf, size_t len);
-  int (*ioctl)(int fd, int op, unsigned char * buf, size_t len);
+  int (*ioctl)(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid);
   int (*close)(int fd);
   ssize_t (*enqueue)(int fd, void * buf, size_t len, struct message * reply_msg);
   int (*select)(pid_t pid, int remote_fd, int fd, int read_write, int start_stop, struct sockaddr_un * sock_addr);
@@ -90,9 +90,9 @@ struct device_desc {
 
   int timer;
   int timer_started;
-
-  int session;
-  int fg_pgrp;
+  
+  pid_t session;
+  pid_t fg_pgrp;
 };
 
 struct client {
@@ -253,8 +253,8 @@ int register_device(unsigned short minor, struct device_ops * dev_ops) {
   devices[minor].timer = timerfd_create(CLOCK_MONOTONIC, 0);
   devices[minor].timer_started = 0;
   
-  devices[minor].session = -1;
-  devices[minor].fg_pgrp = -1;
+  devices[minor].session = 0;
+  devices[minor].fg_pgrp = 0;
 
   return 0;
 }
@@ -267,6 +267,20 @@ struct device_desc * get_device(unsigned short minor) {
 struct device_desc * get_device_from_fd(int fd) {
 
   return &devices[clients[fd].minor];
+}
+
+struct device_desc * get_device_from_session(pid_t sid, unsigned short * min) {
+
+  for (unsigned short i = 1; i <= minor; i++) {
+
+    if (devices[i].session == sid) {
+
+      *min = i;
+      return &devices[i];
+    }
+  }
+
+  return NULL;
 }
 
 EM_JS(int, probe_terminal, (), {
@@ -306,54 +320,6 @@ EM_JS(int, write_terminal, (unsigned char * buf, unsigned long len), {
     return len;
   });
 
-  /*static int add_char(struct device_desc * dev, unsigned char c) {
-
-  int end2 = (dev->end+1)%TTY_BUF_SIZE;
-
-  if (end2 != dev->start) {
-    
-    dev->buf[dev->end] = c;
-    dev->end = end2;
-
-    return 0;
-  }
-
-  return -1;
-}
-
-static int del_char(struct device_desc * dev) {
-
-  if (dev->end == dev->start) {
-
-    return -1;
-  }
-  
-  int end2 = ((dev->end-1)>=0)?dev->end-1:TTY_BUF_SIZE-1;
-
-  if ( (dev->buf[end2] == '\r') || (dev->buf[end2] == '\n') ) {
-
-    return -1;
-  }
-  
-  dev->end = end2;
-  
-  return 0;
-}
-
-static void extract_chars(struct device_desc * dev, size_t len, unsigned char * buf) {
-
-  int i;
-  size_t n = 0;
-  
-  for (i = dev->start; n < len; i = (i+1)%TTY_BUF_SIZE) {
-
-    buf[n] = dev->buf[i];
-    ++n;
-  }
-
-  dev->start = i;
-  }*/
-
 static void local_tty_start_timer(int fd) {
 
    struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
@@ -375,7 +341,7 @@ static void local_tty_start_timer(int fd) {
    }
 }
 
-static int local_tty_open(const char * pathname, int flags, mode_t mode, pid_t pid, unsigned short minor) {
+static int local_tty_open(const char * pathname, int flags, mode_t mode, unsigned short minor, pid_t pid, pid_t sid) {
 
   //emscripten_log(EM_LOG_CONSOLE,"local_tty_open: %d", last_fd);
 
@@ -403,29 +369,16 @@ static ssize_t local_tty_read(int fd, void * buf, size_t len) {
 
       len2 = count_circular_buffer_index(&dev->rx_buf, i)+1;
     }
-
-    /*for (int i = dev->start; i != dev->end; i = (i+1)%TTY_BUF_SIZE) {
-
-      if ( (dev->buf[i] == '\n') || (dev->buf[i] == '\r') ) {
-
-	len2 = (i >= dev->start)?i-dev->start+1:TTY_BUF_SIZE-dev->start+i+1;
-	break;
-      }
-      }*/
-      
   }
   else {
 
     len2 = count_circular_buffer(&dev->rx_buf);
-
-    //len2 = (dev->end >= dev->start)?dev->end-dev->start+1:TTY_BUF_SIZE-dev->start+dev->end+1;
   }
 
   if (len2 > 0) {
       
     size_t sent_len = (len2 <= len)?len2:len;
 
-    //extract_chars(dev, sent_len, buf);
     read_circular_buffer(&dev->rx_buf, sent_len, buf);
     
     return sent_len;
@@ -455,8 +408,6 @@ static void tty_write_char(struct device_desc * dev, char c) {
 
 static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
-  //unsigned char tmp_buf[4096];
-
   struct device_desc * dev = (fd == -1)?get_device(1):get_device_from_fd(fd);
 
   unsigned char * data = (unsigned char *)buf;
@@ -470,8 +421,6 @@ static ssize_t local_tty_write(int fd, const void * buf, size_t count) {
 
   //emscripten_log(EM_LOG_CONSOLE, "local_tty_write: tx_buf count=%d", count_circular_buffer(&dev->tx_buf));
 
-  //write_terminal(tmp_buf, j);
-  
   local_tty_start_timer(fd);
   
   return count;
@@ -509,7 +458,7 @@ static void local_tty_flush(int fd) {
   }
 }
 
-static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
+static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len, pid_t pid, pid_t sid) {
   
   //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: fd=%d op=%d", fd, op);
   
@@ -571,9 +520,23 @@ static int local_tty_ioctl(int fd, int op, unsigned char * buf, size_t len) {
     break;
 
   case TIOCSCTTY:
+    {
+      int arg;
 
-    //emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY (%d %d)", get_device_from_fd(fd)->session, get_device_from_fd(fd)->fg_pgrp);
+      memcpy(&arg, buf, sizeof(int));
 
+      emscripten_log(EM_LOG_CONSOLE,"local_tty_ioctl: TIOCSCTTY (%d %d %d)", get_device_from_fd(fd)->session, sid, arg);
+
+      if ( (pid == sid) && (get_device_from_fd(fd)->session == 0) && (!arg) ) {
+
+	get_device_from_fd(fd)->session = sid;
+      }
+      else if (arg) {
+
+	get_device_from_fd(fd)->session = sid;
+      }
+    }
+    
     break;
 
   default:
@@ -645,13 +608,6 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 
 	    local_tty_write(fd, "\x1b[D\x1b[K", 6);
 	  }
-	    
-	  /*echo_buf[k++] = 27;
-	  echo_buf[k++] = '[';
-	  echo_buf[k++] = 'D';
-	  echo_buf[k++] = 27;
-	  echo_buf[k++] = '[';
-	  echo_buf[k++] = 'K';*/
 	}
       }
       else {
@@ -702,12 +658,6 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
     }
   }
 
-  // Echo
-  /*if (k > 0) {
-    
-    local_tty_write(fd, echo_buf, k);
-    }*/
-
   //emscripten_log(EM_LOG_CONSOLE, "local_tty_enqueue: j=%d %d", j, count_circular_buffer(&dev->rx_buf));
 
   if (j > 0) { // data has been enqueued
@@ -721,26 +671,15 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
       if (dev->ctrl.c_lflag & ICANON) {
 
 	// Search EOL
-	 int i;
+	int i;
 
-	 if (find_eol_circular_buffer(&dev->rx_buf, &i) > 0) {
+	if (find_eol_circular_buffer(&dev->rx_buf, &i) > 0) {
 
-	   len = count_circular_buffer_index(&dev->rx_buf, i)+1;
-	 }
-
-	 /*for (int i = dev->rx_buf.start; i != dev->rx_buf.end; i = (i+1)%TTY_BUF_SIZE) {
-
-	  if ( (dev->rx_buf.buf[i] == '\n') || (dev->rx_buf.buf[i] == '\r') ) {
-
-	    len = (i >= dev->rx_buf.start)?i-dev->rx_buf.start+1:TTY_BUF_SIZE-dev->rx_buf.start+i+1;
-	    break;
-	  }
-	  }*/
-      
+	  len = count_circular_buffer_index(&dev->rx_buf, i)+1;
+	}
       }
       else {
 
-	//len = (dev->rx_buf.end >= dev->rx_buf.start)?dev->rx_buf.end-dev->rx_buf.start+1:TTY_BUF_SIZE-dev->rx_buf.start+dev->rx_buf.end+1;
 	len = count_circular_buffer(&dev->rx_buf);
       }
 
@@ -760,8 +699,6 @@ static ssize_t local_tty_enqueue(int fd, void * buf, size_t count, struct messag
 	//emscripten_log(EM_LOG_CONSOLE, "(2) dev->read_pending.len=%d dev->start=%d len=%d sent_len=%d", dev->read_pending.len, dev->start, len, sent_len);
 
 	read_circular_buffer(&dev->rx_buf, sent_len, (char *)reply_msg->_u.io_msg.buf);
-	
-	//extract_chars(dev, sent_len, reply_msg->_u.io_msg.buf);
 
 	return sent_len;
       }
@@ -862,10 +799,11 @@ static void add_read_pending_request(pid_t pid, int fd, size_t len, struct socka
 int main() {
 
   int sock;
-  struct sockaddr_un local_addr, resmgr_addr, remote_addr;
+  struct sockaddr_un local_addr, resmgr_addr, remote_addr, ioctl_addr;
   int bytes_rec;
   socklen_t len;
   char buf[1256];
+  char ioctl_buf[1256];
   
   // Use console.log as tty is not yet started
   emscripten_log(EM_LOG_CONSOLE, "Starting " TTY_VERSION "...");
@@ -955,7 +893,7 @@ int main() {
 
       get_device(1)->ws.ws_row = msg->_u.probe_tty_msg.rows;
       get_device(1)->ws.ws_col = msg->_u.probe_tty_msg.cols;
-
+      
       local_tty_write(-1, TTY_VERSION, strlen(TTY_VERSION));
 
       // Terminal probed: minor = 1
@@ -1012,27 +950,49 @@ int main() {
     }
     else if (msg->msg_id == OPEN) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d, %d", msg->pid, msg->_u.open_msg.minor);
+      emscripten_log(EM_LOG_CONSOLE, "tty: OPEN from %d (%d), %d", msg->pid, msg->_u.open_msg.sid, msg->_u.open_msg.minor);
 
-      int remote_fd = get_device(msg->_u.open_msg.minor)->ops->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, msg->_u.open_msg.minor);
+      if (msg->_u.open_msg.minor == 0) { // /dev/tty
+
+	emscripten_log(EM_LOG_CONSOLE, "tty: OPEN /dev/tty from session = %d", msg->_u.open_msg.sid);
+
+	unsigned short min;
+	
+	struct device_desc * dev = get_device_from_session(msg->_u.open_msg.sid, &min);
+	
+	if (!dev) {
+
+	  emscripten_log(EM_LOG_CONSOLE, "tty: OPEN /dev/tty from session %d -> NONE", msg->_u.open_msg.sid);
+
+	  msg->msg_id |= 0x80;
+
+	  msg->_errno = -1;
+	    
+	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
+	  continue;
+	}
+
+	emscripten_log(EM_LOG_CONSOLE, "tty: OPEN /dev/tty from session -> min=%d", min);
+
+	msg->_u.open_msg.minor = min;
+      }
+
+      int remote_fd = get_device(msg->_u.open_msg.minor)->ops->open("", msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.minor, msg->pid, msg->_u.open_msg.sid);
 
       //emscripten_log(EM_LOG_CONSOLE, "tty: OPEN -> %d", remote_fd);
 
       msg->_u.open_msg.remote_fd = remote_fd;
       
-      if (msg->_u.open_msg.sid) {
+      if (!(msg->_u.open_msg.flags & O_NOCTTY)) {
 
-	if (get_device_from_fd(remote_fd)->session < 0) {
+	if ( (get_device(msg->_u.open_msg.minor)->session == 0) && (msg->pid ==  msg->_u.open_msg.sid) ) {
 
-	  //emscripten_log(EM_LOG_CONSOLE, "!!!! tty: set controlling tty of session %d", msg->_u.open_msg.sid);
-
+	  emscripten_log(EM_LOG_CONSOLE, "!!!! tty: set controlling tty of session %d (%d)", msg->_u.open_msg.sid, get_device(msg->_u.open_msg.minor)->session);
+	  
 	  // tty is not yet controlled so it is now controlling the sid session
-	  get_device_from_fd(msg->_u.io_msg.fd)->session = msg->_u.open_msg.sid;
+	  get_device(msg->_u.open_msg.minor)->session = msg->_u.open_msg.sid;
 	}
-	else {
-
-	  msg->_u.open_msg.sid = -1; // == cancel controlling tty
-	}
+	
       }
 
       msg->msg_id |= 0x80;
@@ -1075,37 +1035,40 @@ int main() {
     }
     else if (msg->msg_id == IOCTL) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
+      emscripten_log(EM_LOG_CONSOLE, "tty: IOCTL from %d: %d", msg->pid, msg->_u.ioctl_msg.op);
 
-      msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len);
+      if (msg->_u.ioctl_msg.op == TIOCSCTTY) {
 
-      /*if (msg->_u.ioctl_msg.op == TIOCSCTTY) {
+	// Ask sid to resmsgr
 
-	struct sockaddr_un resmgr_addr = {
-	  .sun_family = AF_UNIX,
-	  .sun_path = "/var/resmgr.peer",
-	};
+	// Store request and addr
+	memcpy(ioctl_buf, buf, 1256);
+	memcpy(&ioctl_addr, &remote_addr, sizeof(remote_addr));
 
-	
-	struct message msg2;
+	msg->msg_id = GETSID;
+	msg->_u.getsid_msg.pid = 0;
 
-	msg2.msg_id = SCTTY;
-	msg2.pid = msg->pid;
-	msg2._u.sctty_msg.minor = clients[msg->_u.ioctl_msg.fd].minor; 
-	msg2._u.sctty_msg.tty_session = get_device_from_fd(msg->_u.ioctl_msg.fd)->session;
-	memcpy(&(msg2._u.sctty_msg.arg), buf, sizeof(int));
-	
-	sendto(sock, &msg2, sizeof(struct message), 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));
+	sendto(sock, buf, 256, 0, (struct sockaddr *) &resmgr_addr, sizeof(resmgr_addr));	
       }
-      else {*/
-	
+      else {
+
+	msg->_errno = get_device_from_fd(msg->_u.ioctl_msg.fd)->ops->ioctl(msg->_u.ioctl_msg.fd, msg->_u.ioctl_msg.op, msg->_u.ioctl_msg.buf, msg->_u.ioctl_msg.len, msg->pid, 0);
+      
 	msg->msg_id |= 0x80;
 	sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
-	/*}*/
+      }
     }
-    else if (msg->msg_id == (SCTTY|0x80)) {
+    else if (msg->msg_id == (GETSID|0x80)) {
 
-      //emscripten_log(EM_LOG_CONSOLE, "tty: response from SCTTY from %d", msg->pid);
+      emscripten_log(EM_LOG_CONSOLE, "tty: return from GETSID %d %d", msg->pid, msg->_u.getsid_msg.sid);
+
+      struct message * ioctl_msg = (struct message *)&ioctl_buf[0];
+
+      ioctl_msg->_errno = get_device_from_fd(ioctl_msg->_u.ioctl_msg.fd)->ops->ioctl(ioctl_msg->_u.ioctl_msg.fd, ioctl_msg->_u.ioctl_msg.op, ioctl_msg->_u.ioctl_msg.buf, ioctl_msg->_u.ioctl_msg.len, msg->pid, msg->_u.getsid_msg.sid);
+      
+      ioctl_msg->msg_id |= 0x80;
+      sendto(sock, ioctl_buf, 256, 0, (struct sockaddr *) &ioctl_addr, sizeof(ioctl_addr));
+      
     }
     else if (msg->msg_id == FCNTL) {
 

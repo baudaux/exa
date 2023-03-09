@@ -92,10 +92,19 @@ int main() {
 
       // Add driver
       msg->_u.dev_msg.major = device_register_driver(msg->_u.dev_msg.dev_type, (const char *)msg->_u.dev_msg.dev_name, (const char *)remote_addr.sun_path);
+
+      if (msg->_u.dev_msg.major == 1) {
+
+	// TTY driver: add /dev/tty with minor 0
+	
+	struct vnode * vnode = vfs_find_node("/dev");
+	
+	vfs_add_dev(vnode, "tty", CHR_DEV, 1, 0);
+      }
       
       msg->msg_id |= 0x80;
       msg->_errno = 0;
-
+      
       sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == REGISTER_DEVICE) {
@@ -257,33 +266,7 @@ int main() {
     else if (msg->msg_id == OPEN) {
 
       emscripten_log(EM_LOG_CONSOLE, "OPEN from %d: %x %x %s", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname);
-
-      /* Special handling for /dev/tty */
-      if (strcmp((const char *)msg->_u.open_msg.pathname, "/dev/tty") == 0) {
-
-	struct vnode * vnode = process_get_ctty(msg->pid);
-
-	if (vnode) {
-
-	  emscripten_log(EM_LOG_CONSOLE, "ctty found");
-
-	  // Forward msg to driver
-
-	  msg->_u.open_msg.type = vnode->_u.dev.type;
-	  msg->_u.open_msg.major = vnode->_u.dev.major;
-	  msg->_u.open_msg.minor = vnode->_u.dev.minor;
-	  strcpy((char *)msg->_u.open_msg.peer, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
-	  
-	  struct sockaddr_un driver_addr;
-
-	  driver_addr.sun_family = AF_UNIX;
-	  strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
-
-	  sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
-	  continue;
-	}
-      }
-
+      
       int remote_fd = vfs_open((const char *)msg->_u.open_msg.pathname, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->pid, vfs_minor);
       
       if (remote_fd == 0) {
@@ -292,23 +275,10 @@ int main() {
 
 	emscripten_log(EM_LOG_CONSOLE, "vnode is a device or mount point: %d %d %d %s",vnode->_u.dev.type, vnode->_u.dev.major, vnode->_u.dev.minor, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
-	msg->_u.open_msg.sid = 0;
-	
-	if ( (vnode->_u.dev.major == 1) && (!(msg->_u.open_msg.flags & O_NOCTTY )) ) {
-	  struct vnode * ctty = process_get_ctty(msg->pid);
-
-	  if (!ctty) { // process has no controlling tty
-
-	    emscripten_log(EM_LOG_CONSOLE, "process has no controlling tty: session=%d", process_getsid(msg->pid));
-
-	    msg->_u.open_msg.sid = process_getsid(msg->pid);
-
-	    process_set_ctty(msg->pid, vnode); // temporary, to be confirmed by the returned message
-	  }
-	}
+	msg->_u.open_msg.sid = process_getsid(msg->pid);
 
 	// Forward msg to driver
-
+	
 	msg->_u.open_msg.type = vnode->_u.dev.type;
 	msg->_u.open_msg.major = vnode->_u.dev.major;
 	msg->_u.open_msg.minor = vnode->_u.dev.minor;
@@ -320,7 +290,6 @@ int main() {
 	strcpy(driver_addr.sun_path, device_get_driver(vnode->_u.dev.type, vnode->_u.dev.major)->peer);
 
 	sendto(sock, buf, 1256, 0, (struct sockaddr *) &driver_addr, sizeof(driver_addr));
-	  
       }
       else if (remote_fd > 0) {
 
@@ -352,7 +321,7 @@ int main() {
     }
     else if (msg->msg_id == (OPEN|0x80)) {
 
-      emscripten_log(EM_LOG_CONSOLE, "Response from OPEN from %d: %x %x %s %d %d", msg->pid, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname,msg->pid, msg->_u.open_msg.remote_fd);
+      emscripten_log(EM_LOG_CONSOLE, "Response from OPEN from %d: %d %x %x %s %d %d", msg->pid, msg->_errno, msg->_u.open_msg.flags, msg->_u.open_msg.mode, msg->_u.open_msg.pathname,msg->pid, msg->_u.open_msg.remote_fd);
 
       if (msg->_errno == 0) {
 
@@ -360,20 +329,6 @@ int main() {
 
 	// Add /proc/<pid>/fd/<fd> entry
 	process_add_proc_fd_entry(msg->pid, msg->_u.open_msg.fd, (char *)msg->_u.open_msg.pathname);
-
-	if (msg->_u.open_msg.sid < 0) {
-
-	  process_set_ctty(msg->pid, NULL); // Cancel controlling tty
-	}
-      }
-      else {
-
-	if (msg->_u.open_msg.sid) {
-
-	  // Open failed so cancel controlling tty
-
-	  process_set_ctty(msg->pid, NULL);
-	}
       }
 
       // Forward response to process
@@ -823,17 +778,6 @@ int main() {
       
       sendto(sock, buf, 1256, 0, (struct sockaddr *)process_get_peer_addr(msg->pid), sizeof(struct sockaddr_un));
       
-    }
-    else if (msg->msg_id == SCTTY) {
-
-      emscripten_log(EM_LOG_CONSOLE, "SCTTY from %d (%d)", msg->pid, process_getsid(msg->pid));
-
-      emscripten_log(EM_LOG_CONSOLE, "minor=%d tty_session=%d arg=%d", msg->_u.sctty_msg.minor, msg->_u.sctty_msg.tty_session, msg->_u.sctty_msg.arg);
-
-      msg->msg_id |= 0x80;
-      msg->_errno = 0;
-      
-      sendto(sock, buf, 256, 0, (struct sockaddr *) &remote_addr, sizeof(remote_addr));
     }
     else if (msg->msg_id == TIMERFD_CREATE) {
 
